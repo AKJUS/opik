@@ -21,10 +21,12 @@ import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadata;
@@ -96,6 +98,7 @@ public class TracesResource {
     private final @NonNull TraceSortingFactory traceSortingFactory;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull Streamer streamer;
+    private final @NonNull ProjectService projectService;
 
     @GET
     @Operation(operationId = "getTracesByProject", summary = "Get traces by project_name or project_id", description = "Get traces by project_name or project_id", responses = {
@@ -108,7 +111,8 @@ public class TracesResource {
             @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("exclude") String exclude) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
@@ -128,6 +132,7 @@ public class TracesResource {
                 .filters(traceFilters)
                 .truncate(truncate)
                 .sortingFields(sortingFields)
+                .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -164,6 +169,9 @@ public class TracesResource {
         Trace trace = service.get(id)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        // Verify project visibility
+        projectService.get(trace.projectId());
 
         log.info("Got trace by id '{}', projectId '{}' on workspace_id '{}'", trace.id(), trace.projectId(),
                 workspaceId);
@@ -530,6 +538,9 @@ public class TracesResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+
+        // Verify project visibility
+        projectService.get(identifier.projectId());
 
         log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.projectId(),
                 identifier.threadId(), workspaceId);

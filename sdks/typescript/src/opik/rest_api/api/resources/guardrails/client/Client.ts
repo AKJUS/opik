@@ -45,11 +45,11 @@ export class Guardrails {
     /**
      * Batch guardrails for traces
      *
-     * @param {OpikApi.GuardrailBatch} request
+     * @param {OpikApi.GuardrailBatchWrite} request
      * @param {Guardrails.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.guardrails.addGuardrailsBatch({
+     *     await client.guardrails.createGuardrails({
      *         guardrails: [{
      *                 entityId: "entity_id",
      *                 secondaryId: "secondary_id",
@@ -64,10 +64,17 @@ export class Guardrails {
      *             }]
      *     })
      */
-    public async addGuardrailsBatch(
-        request: OpikApi.GuardrailBatch,
+    public createGuardrails(
+        request: OpikApi.GuardrailBatchWrite,
         requestOptions?: Guardrails.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createGuardrails(request, requestOptions));
+    }
+
+    private async __createGuardrails(
+        request: OpikApi.GuardrailBatchWrite,
+        requestOptions?: Guardrails.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -89,20 +96,21 @@ export class Guardrails {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.GuardrailBatch.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.GuardrailBatchWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -111,12 +119,14 @@ export class Guardrails {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/guardrails.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

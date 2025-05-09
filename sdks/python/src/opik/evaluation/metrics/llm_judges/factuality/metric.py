@@ -1,15 +1,9 @@
-import logging
 from typing import Union, Optional, List, Any
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
-from opik import logging_messages
 
-from . import template
-from opik.exceptions import MetricComputationError
-from .. import parsing_helpers
-
-LOGGER = logging.getLogger(__name__)
+from . import template, parser
 
 
 class FactualityResponseFormatClaim(pydantic.BaseModel):
@@ -35,6 +29,8 @@ class Factuality(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "FactualityMetric".
         few_shot_examples: A list of few-shot examples to be used in the query. If None, default examples will be used.
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when
+            there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import Factuality
@@ -50,10 +46,12 @@ class Factuality(base_metric.BaseMetric):
         name: str = "FactualityMetric",
         few_shot_examples: Optional[List[template.FewShotExampleFactuality]] = None,
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
             track=track,
+            project_name=project_name,
         )
 
         self._init_model(model)
@@ -93,7 +91,7 @@ class Factuality(base_metric.BaseMetric):
             input=llm_query, response_format=FactualityResponseFormat
         )
 
-        return self._parse_model_output(model_output)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self, input: str, output: str, context: List[str], **ignored_kwargs: Any
@@ -123,21 +121,4 @@ class Factuality(base_metric.BaseMetric):
             input=llm_query, response_format=FactualityResponseFormat
         )
 
-        return self._parse_model_output(model_output)
-
-    def _parse_model_output(self, content: str) -> score_result.ScoreResult:
-        try:
-            list_content = parsing_helpers.extract_json_content_or_raise(content)
-
-            reason = ""
-            score = 0.0
-
-            for claim in list_content:
-                score += claim["score"]
-                reason += claim["reason"] + "\n"
-
-            score /= len(list_content)
-
-            return score_result.ScoreResult(name=self.name, value=score, reason=reason)
-        except Exception:
-            raise MetricComputationError(logging_messages.FACTUALITY_SCORE_CALC_FAILED)
+        return parser.parse_model_output(content=model_output, name=self.name)

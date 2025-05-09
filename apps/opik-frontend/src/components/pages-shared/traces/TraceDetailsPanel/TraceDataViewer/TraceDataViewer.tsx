@@ -33,6 +33,7 @@ type TraceDataViewerProps = {
   spanId?: string;
   lastSection?: LastSectionValue | null;
   setLastSection: (v: LastSectionValue) => void;
+  isSpansLazyLoading: boolean;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -43,15 +44,14 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   spanId,
   lastSection,
   setLastSection,
+  isSpansLazyLoading,
 }) => {
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
 
-  const agentGraphData = get(
-    trace,
-    ["metadata", METADATA_AGENT_GRAPH_KEY],
-    null,
-  );
+  const agentGraphData =
+    get(data, ["metadata", METADATA_AGENT_GRAPH_KEY], null) ||
+    get(trace, ["metadata", METADATA_AGENT_GRAPH_KEY], null);
   const hasAgentGraph = Boolean(agentGraphData);
   const hasError = Boolean(data.error_info);
 
@@ -63,6 +63,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     (tab === "graph" && !hasAgentGraph) || (tab === "error" && !hasError)
       ? "input"
       : tab;
+
+  const isSpanInputOutputLoading =
+    type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
 
   return (
     <div className="size-full max-w-full overflow-auto p-6">
@@ -167,7 +170,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             )}
           </TabsList>
           <TabsContent value="input">
-            <InputOutputTab data={data} />
+            <InputOutputTab data={data} isLoading={isSpanInputOutputLoading} />
           </TabsContent>
           <TabsContent value="feedback_scores">
             <FeedbackScoreTab data={data} traceId={traceId} spanId={spanId} />

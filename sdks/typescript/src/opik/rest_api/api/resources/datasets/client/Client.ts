@@ -52,11 +52,18 @@ export class Datasets {
      * @example
      *     await client.datasets.findDatasets()
      */
-    public async findDatasets(
+    public findDatasets(
         request: OpikApi.FindDatasetsRequest = {},
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<OpikApi.DatasetPagePublic> {
-        const { page, size, withExperimentsOnly, promptId, name, sorting } = request;
+    ): core.HttpResponsePromise<OpikApi.DatasetPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findDatasets(request, requestOptions));
+    }
+
+    private async __findDatasets(
+        request: OpikApi.FindDatasetsRequest = {},
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetPagePublic>> {
+        const { page, size, withExperimentsOnly, withOptimizationsOnly, promptId, name, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -68,6 +75,10 @@ export class Datasets {
 
         if (withExperimentsOnly != null) {
             _queryParams["with_experiments_only"] = withExperimentsOnly.toString();
+        }
+
+        if (withOptimizationsOnly != null) {
+            _queryParams["with_optimizations_only"] = withOptimizationsOnly.toString();
         }
 
         if (promptId != null) {
@@ -110,18 +121,22 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.DatasetPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.DatasetPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -130,12 +145,14 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/datasets.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -151,7 +168,17 @@ export class Datasets {
      *         name: "name"
      *     })
      */
-    public async createDataset(request: OpikApi.DatasetWrite, requestOptions?: Datasets.RequestOptions): Promise<void> {
+    public createDataset(
+        request: OpikApi.DatasetWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createDataset(request, requestOptions));
+    }
+
+    private async __createDataset(
+        request: OpikApi.DatasetWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -180,13 +207,14 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -195,12 +223,14 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/datasets.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -221,10 +251,17 @@ export class Datasets {
      *             }]
      *     })
      */
-    public async createOrUpdateDatasetItems(
+    public createOrUpdateDatasetItems(
         request: OpikApi.DatasetItemBatchWrite,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createOrUpdateDatasetItems(request, requestOptions));
+    }
+
+    private async __createOrUpdateDatasetItems(
+        request: OpikApi.DatasetItemBatchWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -253,13 +290,14 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -268,12 +306,14 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PUT /v1/private/datasets/items.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -287,7 +327,17 @@ export class Datasets {
      * @example
      *     await client.datasets.getDatasetById("id")
      */
-    public async getDatasetById(id: string, requestOptions?: Datasets.RequestOptions): Promise<OpikApi.DatasetPublic> {
+    public getDatasetById(
+        id: string,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetById(id, requestOptions));
+    }
+
+    private async __getDatasetById(
+        id: string,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetPublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -315,18 +365,22 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.DatasetPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.DatasetPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -335,12 +389,14 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/datasets/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -357,11 +413,19 @@ export class Datasets {
      *         name: "name"
      *     })
      */
-    public async updateDataset(
+    public updateDataset(
         id: string,
         request: OpikApi.DatasetUpdate,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateDataset(id, request, requestOptions));
+    }
+
+    private async __updateDataset(
+        id: string,
+        request: OpikApi.DatasetUpdate,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -390,13 +454,14 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -405,12 +470,14 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PUT /v1/private/datasets/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -424,7 +491,14 @@ export class Datasets {
      * @example
      *     await client.datasets.deleteDataset("id")
      */
-    public async deleteDataset(id: string, requestOptions?: Datasets.RequestOptions): Promise<void> {
+    public deleteDataset(id: string, requestOptions?: Datasets.RequestOptions): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteDataset(id, requestOptions));
+    }
+
+    private async __deleteDataset(
+        id: string,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -452,13 +526,14 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -467,12 +542,14 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling DELETE /v1/private/datasets/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -488,10 +565,17 @@ export class Datasets {
      *         datasetName: "dataset_name"
      *     })
      */
-    public async deleteDatasetByName(
+    public deleteDatasetByName(
         request: OpikApi.DatasetIdentifier,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteDatasetByName(request, requestOptions));
+    }
+
+    private async __deleteDatasetByName(
+        request: OpikApi.DatasetIdentifier,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -520,13 +604,14 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -535,12 +620,14 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/datasets/delete.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -556,10 +643,17 @@ export class Datasets {
      *         itemIds: ["item_ids"]
      *     })
      */
-    public async deleteDatasetItems(
+    public deleteDatasetItems(
         request: OpikApi.DatasetItemsDelete,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteDatasetItems(request, requestOptions));
+    }
+
+    private async __deleteDatasetItems(
+        request: OpikApi.DatasetItemsDelete,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -588,13 +682,14 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -603,6 +698,7 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -611,6 +707,7 @@ export class Datasets {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -626,10 +723,17 @@ export class Datasets {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteDatasetsBatch(
+    public deleteDatasetsBatch(
         request: OpikApi.BatchDelete,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteDatasetsBatch(request, requestOptions));
+    }
+
+    private async __deleteDatasetsBatch(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -658,13 +762,14 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -673,6 +778,7 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -681,6 +787,7 @@ export class Datasets {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -697,11 +804,21 @@ export class Datasets {
      *         experimentIds: "experiment_ids"
      *     })
      */
-    public async findDatasetItemsWithExperimentItems(
+    public findDatasetItemsWithExperimentItems(
         id: string,
         request: OpikApi.FindDatasetItemsWithExperimentItemsRequest,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<OpikApi.DatasetItemPageCompare> {
+    ): core.HttpResponsePromise<OpikApi.DatasetItemPageCompare> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__findDatasetItemsWithExperimentItems(id, request, requestOptions),
+        );
+    }
+
+    private async __findDatasetItemsWithExperimentItems(
+        id: string,
+        request: OpikApi.FindDatasetItemsWithExperimentItemsRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetItemPageCompare>> {
         const { page, size, experimentIds, filters, truncate } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -749,18 +866,22 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.DatasetItemPageCompare.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.DatasetItemPageCompare.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -769,6 +890,7 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -777,6 +899,7 @@ export class Datasets {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -792,10 +915,17 @@ export class Datasets {
      *         datasetName: "dataset_name"
      *     })
      */
-    public async getDatasetByIdentifier(
+    public getDatasetByIdentifier(
         request: OpikApi.DatasetIdentifierPublic,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<OpikApi.DatasetPublic> {
+    ): core.HttpResponsePromise<OpikApi.DatasetPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetByIdentifier(request, requestOptions));
+    }
+
+    private async __getDatasetByIdentifier(
+        request: OpikApi.DatasetIdentifierPublic,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetPublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -824,18 +954,22 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.DatasetPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.DatasetPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -844,6 +978,7 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -852,6 +987,7 @@ export class Datasets {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -865,10 +1001,17 @@ export class Datasets {
      * @example
      *     await client.datasets.getDatasetItemById("itemId")
      */
-    public async getDatasetItemById(
+    public getDatasetItemById(
         itemId: string,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<OpikApi.DatasetItemPublic> {
+    ): core.HttpResponsePromise<OpikApi.DatasetItemPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetItemById(itemId, requestOptions));
+    }
+
+    private async __getDatasetItemById(
+        itemId: string,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetItemPublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -896,18 +1039,22 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.DatasetItemPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.DatasetItemPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -916,6 +1063,7 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -924,6 +1072,7 @@ export class Datasets {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -938,11 +1087,19 @@ export class Datasets {
      * @example
      *     await client.datasets.getDatasetItems("id")
      */
-    public async getDatasetItems(
+    public getDatasetItems(
         id: string,
         request: OpikApi.GetDatasetItemsRequest = {},
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<OpikApi.DatasetItemPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.DatasetItemPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetItems(id, request, requestOptions));
+    }
+
+    private async __getDatasetItems(
+        id: string,
+        request: OpikApi.GetDatasetItemsRequest = {},
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetItemPagePublic>> {
         const { page, size, truncate } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -985,18 +1142,22 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.DatasetItemPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.DatasetItemPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -1005,6 +1166,7 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1013,6 +1175,7 @@ export class Datasets {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1027,11 +1190,19 @@ export class Datasets {
      * @example
      *     await client.datasets.getDatasetItemsOutputColumns("id")
      */
-    public async getDatasetItemsOutputColumns(
+    public getDatasetItemsOutputColumns(
         id: string,
         request: OpikApi.GetDatasetItemsOutputColumnsRequest = {},
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<OpikApi.PageColumns> {
+    ): core.HttpResponsePromise<OpikApi.PageColumns> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetItemsOutputColumns(id, request, requestOptions));
+    }
+
+    private async __getDatasetItemsOutputColumns(
+        id: string,
+        request: OpikApi.GetDatasetItemsOutputColumnsRequest = {},
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PageColumns>> {
         const { experimentIds } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (experimentIds != null) {
@@ -1066,18 +1237,22 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.PageColumns.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.PageColumns.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -1086,6 +1261,7 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1094,6 +1270,7 @@ export class Datasets {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1101,10 +1278,17 @@ export class Datasets {
     /**
      * Stream dataset items
      */
-    public async streamDatasetItems(
+    public streamDatasetItems(
         request: OpikApi.DatasetItemStreamRequest,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<stream.Readable> {
+    ): core.HttpResponsePromise<stream.Readable> {
+        return core.HttpResponsePromise.fromPromise(this.__streamDatasetItems(request, requestOptions));
+    }
+
+    private async __streamDatasetItems(
+        request: OpikApi.DatasetItemStreamRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<stream.Readable>> {
         const _response = await core.fetcher<stream.Readable>({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1134,13 +1318,14 @@ export class Datasets {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -1149,6 +1334,7 @@ export class Datasets {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1157,6 +1343,7 @@ export class Datasets {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

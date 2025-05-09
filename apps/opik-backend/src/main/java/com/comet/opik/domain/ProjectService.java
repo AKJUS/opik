@@ -7,7 +7,7 @@ import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
-import com.comet.opik.api.ProjectVisibility;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.Direction;
@@ -19,6 +19,7 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.BinaryOperatorUtils;
+import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -53,6 +54,7 @@ import static com.comet.opik.api.ProjectStats.ProjectStatItem;
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static java.util.Collections.reverseOrder;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
@@ -84,13 +86,15 @@ public interface ProjectService {
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
-    Project getOrCreate(String workspaceId, String projectName, String userName);
+    Mono<Project> getOrCreate(String projectName);
 
     Project retrieveByName(String projectName);
 
     Mono<List<Project>> retrieveByNamesOrCreate(Set<String> projectNames);
 
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
+
+    UUID resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
 
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
@@ -207,13 +211,10 @@ class ProjectServiceImpl implements ProjectService {
     @Override
     public Project get(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
-                .map(v -> v == ProjectVisibility.PUBLIC)
-                .orElse(false);
 
         return Optional.of(get(id, workspaceId))
-                .filter(project -> !publicOnly || project.visibility() == ProjectVisibility.PUBLIC)
-                .orElseThrow(this::createNotFoundError);
+                .flatMap(this::verifyVisibility)
+                .orElseThrow(() -> ErrorUtils.failWithNotFound("Project", id));
     }
 
     @Override
@@ -264,6 +265,7 @@ class ProjectServiceImpl implements ProjectService {
                 .totalEstimatedCost(StatsMapper.getStatsTotalEstimatedCost(projectStats))
                 .usage(StatsMapper.getStatsUsage(projectStats))
                 .traceCount(StatsMapper.getStatsTraceCount(projectStats))
+                .guardrailsFailedCount(StatsMapper.getStatsGuardrailsFailedCount(projectStats))
                 .build();
     }
 
@@ -308,7 +310,7 @@ class ProjectServiceImpl implements ProjectService {
             @NonNull List<SortingField> sortingFields) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        ProjectVisibility visibility = requestContext.get().getVisibility();
+        Visibility visibility = requestContext.get().getVisibility();
 
         if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
             return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
@@ -376,7 +378,7 @@ class ProjectServiceImpl implements ProjectService {
     private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull SortingField sortingField) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        ProjectVisibility visibility = requestContext.get().getVisibility();
+        Visibility visibility = requestContext.get().getVisibility();
 
         // get all project ids and last updated
         List<ProjectIdLastUpdated> allProjectIdsLastUpdated = template.inTransaction(READ_ONLY, handle -> {
@@ -464,7 +466,14 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Project getOrCreate(@NonNull String workspaceId, @NonNull String projectName, @NonNull String userName) {
+    public Mono<Project> getOrCreate(@NonNull String projectName) {
+        return makeMonoContextAware((userName, workspaceId) -> Mono
+                .fromCallable(() -> getOrCreate(workspaceId, projectName, userName))
+                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    private Project getOrCreate(String workspaceId, String projectName, String userName) {
 
         return findByNames(workspaceId, List.of(projectName))
                 .stream()
@@ -473,7 +482,7 @@ class ProjectServiceImpl implements ProjectService {
                     log.info("Creating project with name '{}' on workspaceId '{}'", projectName, workspaceId);
                     var project = Project.builder()
                             .name(projectName)
-                            .visibility(ProjectVisibility.PRIVATE)
+                            .visibility(Visibility.PRIVATE)
                             .build();
 
                     UUID projectId = idGenerator.generateId();
@@ -516,6 +525,8 @@ class ProjectServiceImpl implements ProjectService {
                                 .totalEstimatedCost(
                                         StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
                                 .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
+                                .guardrailsFailedCount(
+                                        StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
                                 .build();
                     })
                     .orElseThrow(this::createNotFoundError);
@@ -538,6 +549,28 @@ class ProjectServiceImpl implements ProjectService {
     public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
         template.inTransaction(WRITE,
                 handle -> handle.attach(ProjectDAO.class).recordLastUpdatedTrace(workspaceId, lastUpdatedTraces));
+    }
+
+    @Override
+    public UUID resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        Project project = verifyVisibility(projectId != null
+                ? get(projectId)
+                : findByNames(workspaceId, List.of(projectName)).stream().findFirst()
+                        .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName)))
+                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName));
+
+        return project.id();
+    }
+
+    private Optional<Project> verifyVisibility(@NonNull Project project) {
+        boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
+                .map(v -> v == Visibility.PUBLIC)
+                .orElse(false);
+
+        return Optional.of(project)
+                .filter(p -> !publicOnly || p.visibility() == Visibility.PUBLIC);
     }
 
     private Mono<Void> checkIfNeededToCreateProjectsWithContext(String workspaceId,
@@ -575,7 +608,7 @@ class ProjectServiceImpl implements ProjectService {
                         UUID projectId = idGenerator.generateId();
                         var newProject = Project.builder()
                                 .name(projectName)
-                                .visibility(ProjectVisibility.PRIVATE)
+                                .visibility(Visibility.PRIVATE)
                                 .id(projectId)
                                 .createdBy(userName)
                                 .lastUpdatedBy(userName)
@@ -594,5 +627,15 @@ class ProjectServiceImpl implements ProjectService {
 
             return null;
         });
+    }
+
+    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
+        return switch (exception) {
+            case EntityAlreadyExistsException __ -> Mono.fromCallable(
+                    () -> findByNames(workspaceId, List.of(projectName)).stream().findFirst()
+                            .orElseThrow())
+                    .subscribeOn(Schedulers.boundedElastic());
+            default -> Mono.error(exception);
+        };
     }
 }

@@ -10,10 +10,15 @@ export interface Experiment {
     datasetId?: string;
     name?: string;
     metadata?: OpikApi.JsonNode;
+    type?: OpikApi.ExperimentType;
+    optimizationId?: string;
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
     comments?: OpikApi.Comment[];
     traceCount?: number;
     createdAt?: Date;
+    duration?: OpikApi.PercentageValues;
+    totalEstimatedCost?: number;
+    usage?: Record<string, number>;
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;

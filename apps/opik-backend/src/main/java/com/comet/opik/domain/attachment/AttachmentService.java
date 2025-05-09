@@ -16,6 +16,7 @@ import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
@@ -67,6 +68,7 @@ class AttachmentServiceImpl implements AttachmentService {
     private final @NonNull AttachmentDAO attachmentDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull Provider<RequestContext> requestContext;
     private static final Tika tika = new Tika();
 
     @Override
@@ -236,7 +238,12 @@ class AttachmentServiceImpl implements AttachmentService {
 
     private UUID getProjectIdByName(String inputProjectName, String workspaceId, String userName) {
         String projectName = WorkspaceUtils.getProjectName(inputProjectName);
-        return projectService.getOrCreate(workspaceId, projectName, userName).id();
+
+        var project = projectService.getOrCreate(projectName)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return project.id();
     }
 
     private String getMimeType(AttachmentInfoHolder infoHolder) {

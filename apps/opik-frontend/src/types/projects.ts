@@ -1,4 +1,4 @@
-import { AverageFeedbackScore, UsageData } from "@/types/shared";
+import { AggregatedFeedbackScore, UsageData } from "@/types/shared";
 
 export interface ProjectDuration {
   p50: number;
@@ -20,10 +20,10 @@ export interface Project {
 export interface ProjectStatistic {
   project_id?: string;
   usage?: UsageData;
-  feedback_scores?: AverageFeedbackScore[];
+  feedback_scores?: AggregatedFeedbackScore[];
   total_estimated_cost?: number;
   duration?: ProjectDuration;
-  failed_guardrails?: number;
+  guardrails_failed_count?: number;
 }
 
 export type ProjectWithStatistic = Project & ProjectStatistic;

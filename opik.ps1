@@ -2,14 +2,15 @@
 
 [CmdletBinding()]
 param (
-    [string]$option = ''
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$options = @()
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$originalDir = Get-Location
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$dockerComposeDir = Join-Path $scriptDir "deployment\docker-compose"
 
 $REQUIRED_CONTAINERS = @(
     "opik-clickhouse-1",
@@ -18,18 +19,34 @@ $REQUIRED_CONTAINERS = @(
     "opik-redis-1",
     "opik-frontend-1",
     "opik-backend-1",
-    "opik-minio-1"
+    "opik-minio-1",
+    "opik-zookeeper-1"
 )
 
+$GUARDRAILS_CONTAINERS = @(
+    "opik-guardrails-backend-1"
+)
+
+function Get-Containers {
+    $containers = $REQUIRED_CONTAINERS
+    if ($GUARDRAILS_ENABLED) {
+        $containers += $GUARDRAILS_CONTAINERS
+    }
+    return $containers
+}
+
 function Show-Usage {
-    Write-Host 'Usage: opik.ps1 [OPTION]'
+    Write-Host 'Usage: opik.ps1 [OPTIONS]'
     Write-Host ''
     Write-Host 'Options:'
-    Write-Host '  --verify    Check if all containers are healthy'
-    Write-Host '  --info      Display welcome system status, only if all containers are running'
-    Write-Host '  --stop      Stop all containers and clean up'
-    Write-Host '  --debug     Enable debug mode (verbose output)'
-    Write-Host '  --help      Show this help message'
+    Write-Host '  --verify          Check if all containers are healthy'
+    Write-Host '  --info            Display welcome system status, only if all containers are running'
+    Write-Host '  --stop            Stop all containers and clean up'
+    Write-Host '  --build           Build containers before starting (can be combined with other flags)'
+    Write-Host '  --debug           Enable debug mode (verbose output) (can be combined with other flags)'
+    Write-Host '  --port-mapping    Enable port mapping for all containers by using the override file (can be combined with other flags)'
+    Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
+    Write-Host '  --help            Show this help message'
     Write-Host ''
     Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
 }
@@ -47,7 +64,6 @@ function Test-DockerStatus {
     }
 }
 
-
 function Test-ContainersStatus {
     [CmdletBinding()]
     param (
@@ -56,7 +72,9 @@ function Test-ContainersStatus {
     Test-DockerStatus
     $allOk = $true
 
-    foreach ($container in $REQUIRED_CONTAINERS) {
+    $containers = Get-Containers
+
+    foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
         $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
 
@@ -79,7 +97,7 @@ function Test-ContainersStatus {
 function Send-InstallReport {
     param (
         [string]$Uuid,
-        [string]$EventCompleted = $null,   # Pass "true" to send install_completed
+        [string]$EventCompleted = $null,   # Pass "true" to send opik_os_install_completed
         [string]$StartTime = $null         # Optional ISO 8601 format
     )
 
@@ -101,25 +119,28 @@ function Send-InstallReport {
     $Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
 
     if ($EventCompleted -eq "true") {
-        $EventType = "opik_install_completed"
+
+        $EventType = "opik_os_install_completed"
         $EndTime = $Timestamp
 
         $Payload = @{
             anonymous_id = $Uuid
             event_type   = $EventType
             event_properties = @{
-                start_time = $StartTime
-                end_time   = $EndTime
+                start_time  = $StartTime
+                end_time    = $EndTime
+                script_type = "ps1"
             }
         }
     } else {
-        $EventType = "opik_install_started"
+        $EventType = "opik_os_install_started"
 
         $Payload = @{
             anonymous_id = $Uuid
             event_type   = $EventType
             event_properties = @{
                 start_time = $StartTime
+                script_type = "ps1"
             }
         }
     }
@@ -134,7 +155,7 @@ function Send-InstallReport {
         return
     }
 
-    if ($EventType -eq "install_completed") {
+    if ($EventType -eq "opik_os_install_completed") {
         New-Item -ItemType File -Path $InstallMarkerFile -Force | Out-Null
         if ($DebugMode) { Write-Host "[DEBUG] Post-install report sent successfully." }
     } else {
@@ -153,7 +174,9 @@ function Start-MissingContainers {
     if ($DEBUG_MODE) { Write-Host '[DEBUG] Checking required containers...' }
     $allRunning = $true
 
-    foreach ($container in $REQUIRED_CONTAINERS) {
+    $containers = Get-Containers
+
+    foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
         $resolvedStatus = if ($status) { $status } else { 'not found' }
 
@@ -166,8 +189,18 @@ function Start-MissingContainers {
     }
 
     Write-Host '[INFO] Starting missing containers...'
-    Set-Location -Path "$scriptDir\deployment\docker-compose"
-    $dockerArgs = @("compose", "up", "-d")
+
+    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
+
+    if ($PORT_MAPPING) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
+    }
+
+    if ($GUARDRAILS_ENABLED) {
+        $dockerArgs += "--profile", "guardrails"
+    }
+    
+    $dockerArgs += "up", "-d"
 
     if ($BUILD_MODE -eq "true") {
         $dockerArgs += "--build"
@@ -180,7 +213,7 @@ function Start-MissingContainers {
     $interval = 1
     $allRunning = $true
 
-    foreach ($container in $REQUIRED_CONTAINERS) {
+    foreach ($container in $containers) {
         $retries = 0
         if ($DEBUG_MODE) { Write-Host "[DEBUG] Waiting for $container..." }
 
@@ -220,17 +253,25 @@ function Start-MissingContainers {
     if ($allRunning) {
         Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime
     }
-
-    Set-Location -Path $originalDir
 }
 
 function Stop-Containers {
     Test-DockerStatus
     Write-Host '[INFO] Stopping all required containers...'
-    Set-Location -Path "$scriptDir\deployment\docker-compose"
-    docker compose stop
+
+    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
+
+    if ($PORT_MAPPING) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
+    }
+    
+    if ($GUARDRAILS_ENABLED) {
+        $dockerArgs += "--profile", "guardrails"
+    }
+    
+    $dockerArgs += "down"
+    docker @dockerArgs
     Write-Host '[OK] All containers stopped and cleaned up!'
-    Set-Location -Path $originalDir
 }
 
 function Show-Banner {
@@ -263,7 +304,45 @@ function Show-Banner {
     Write-Host '╚═════════════════════════════════════════════════════════════════╝'
 }
 
+function Get-VerifyCommand {
+    if ($GUARDRAILS_ENABLED) {
+        return ".\opik.ps1 --guardrails --verify"
+    }
+    return ".\opik.ps1 --verify"
+}
+
+$BUILD_MODE = $false
 $DEBUG_MODE = $false
+$PORT_MAPPING = $false
+$GUARDRAILS_ENABLED = $false
+$env:OPIK_FRONTEND_FLAVOR = "default"
+$env:TOGGLE_GUARDRAILS_ENABLED = "false"
+
+if ($options -contains '--build') {
+    $BUILD_MODE = $true
+    $options = $options | Where-Object { $_ -ne '--build' }
+}
+
+if ($options -contains '--debug') {
+    $DEBUG_MODE = $true
+    Write-Host '[DEBUG] Debug mode enabled.'
+    $options = $options | Where-Object { $_ -ne '--debug' }
+}
+
+if ($options -contains '--port-mapping') {
+    $PORT_MAPPING = $true
+    $options = $options | Where-Object { $_ -ne '--port-mapping' }
+}
+
+if ($options -contains '--guardrails') {
+    $GUARDRAILS_ENABLED = $true
+    $env:OPIK_FRONTEND_FLAVOR = "guardrails"
+    $env:TOGGLE_GUARDRAILS_ENABLED = "true"
+    $options = $options | Where-Object { $_ -ne '--guardrails' }
+}
+
+# Get the first remaining option
+$option = if ($options.Count -gt 0) { $options[0] } else { '' }
 
 switch ($option) {
     '--verify' {
@@ -277,7 +356,7 @@ switch ($option) {
             Show-Banner
             exit 0
         } else {
-            Write-Host '[WARN] Some containers are not running/healthy. Please run ".\opik.ps1 --verify".'
+            Write-Host "[WARN] Some containers are not running/healthy. Please run '$(Get-VerifyCommand)'."
             exit 1
         }
     }
@@ -289,9 +368,7 @@ switch ($option) {
         Show-Usage
         exit 0
     }
-    '--debug' {
-        $DEBUG_MODE = $true
-        Write-Host '[DEBUG] Debug mode enabled.'
+    '' {
         Write-Host '[DEBUG] Checking container status and starting missing ones...'
         Start-MissingContainers
         Start-Sleep -Seconds 2
@@ -299,32 +376,7 @@ switch ($option) {
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
-            exit 1
-        }
-    }
-    '--build' {
-        $BUILD_MODE = $true
-        Write-Host '[INFO] Checking container status and starting missing ones...'
-        Start-MissingContainers
-        Start-Sleep -Seconds 2
-        Write-Host '[INFO] Re-checking container status...'
-        if (Test-ContainersStatus -ShowOutput:$true) {
-            Show-Banner
-        } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
-            exit 1
-        }
-    }
-    '' {
-        Write-Host '[INFO] Checking container status and starting missing ones...'
-        Start-MissingContainers
-        Start-Sleep -Seconds 2
-        Write-Host '[INFO] Re-checking container status...'
-        if (Test-ContainersStatus -ShowOutput:$true) {
-            Show-Banner
-        } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
+            Write-Host "[WARN] Some containers are still not healthy. Please check manually using '$(Get-VerifyCommand)'."
             exit 1
         }
     }

@@ -21,6 +21,7 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.http.HttpStatus;
@@ -229,7 +230,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
     public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
             UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
-            List<SortingField> sortingFields) {
+            List<SortingField> sortingFields, List<Span.SpanField> exclude) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI));
 
         if (page != null) {
@@ -264,6 +265,10 @@ public class SpanResourceClient extends BaseCommentResourceClient {
             webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
         }
 
+        if (!CollectionUtils.isEmpty(exclude)) {
+            webTarget = webTarget.queryParam("exclude", toURLEncodedQueryParam(exclude));
+        }
+
         try (var actualResponse = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -281,7 +286,16 @@ public class SpanResourceClient extends BaseCommentResourceClient {
             String apiKey,
             String workspaceName,
             Map<String, String> queryParams) {
+        return getSpansStats(projectName, projectId, filters, apiKey, workspaceName, queryParams, HttpStatus.SC_OK);
+    }
 
+    public ProjectStats getSpansStats(String projectName,
+            UUID projectId,
+            List<? extends SpanFilter> filters,
+            String apiKey,
+            String workspaceName,
+            Map<String, String> queryParams,
+            int expectedStatus) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("stats");
 
@@ -307,9 +321,12 @@ public class SpanResourceClient extends BaseCommentResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
 
-        assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualResponse.getStatus()).isEqualTo(expectedStatus);
+        if (expectedStatus == HttpStatus.SC_OK) {
+            return actualResponse.readEntity(ProjectStats.class);
+        }
 
-        return actualResponse.readEntity(ProjectStats.class);
+        return null;
     }
 
 }

@@ -17,6 +17,7 @@ import { FeedbackDefinitions } from "./api/resources/feedbackDefinitions/client/
 import { Guardrails } from "./api/resources/guardrails/client/Client";
 import { LlmProviderKey } from "./api/resources/llmProviderKey/client/Client";
 import { OpenTelemetryIngestion } from "./api/resources/openTelemetryIngestion/client/Client";
+import { Optimizations } from "./api/resources/optimizations/client/Client";
 import { Projects } from "./api/resources/projects/client/Client";
 import { Prompts } from "./api/resources/prompts/client/Client";
 import { ServiceToggles } from "./api/resources/serviceToggles/client/Client";
@@ -63,6 +64,7 @@ export class OpikApiClient {
     protected _guardrails: Guardrails | undefined;
     protected _llmProviderKey: LlmProviderKey | undefined;
     protected _openTelemetryIngestion: OpenTelemetryIngestion | undefined;
+    protected _optimizations: Optimizations | undefined;
     protected _projects: Projects | undefined;
     protected _prompts: Prompts | undefined;
     protected _serviceToggles: ServiceToggles | undefined;
@@ -116,6 +118,10 @@ export class OpikApiClient {
         return (this._openTelemetryIngestion ??= new OpenTelemetryIngestion(this._options));
     }
 
+    public get optimizations(): Optimizations {
+        return (this._optimizations ??= new Optimizations(this._options));
+    }
+
     public get projects(): Projects {
         return (this._projects ??= new Projects(this._options));
     }
@@ -146,7 +152,11 @@ export class OpikApiClient {
      * @example
      *     await client.isAlive()
      */
-    public async isAlive(requestOptions?: OpikApiClient.RequestOptions): Promise<unknown> {
+    public isAlive(requestOptions?: OpikApiClient.RequestOptions): core.HttpResponsePromise<unknown> {
+        return core.HttpResponsePromise.fromPromise(this.__isAlive(requestOptions));
+    }
+
+    private async __isAlive(requestOptions?: OpikApiClient.RequestOptions): Promise<core.WithRawResponse<unknown>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -174,13 +184,14 @@ export class OpikApiClient {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -189,12 +200,14 @@ export class OpikApiClient {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /is-alive/ping.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -205,7 +218,11 @@ export class OpikApiClient {
      * @example
      *     await client.version()
      */
-    public async version(requestOptions?: OpikApiClient.RequestOptions): Promise<unknown> {
+    public version(requestOptions?: OpikApiClient.RequestOptions): core.HttpResponsePromise<unknown> {
+        return core.HttpResponsePromise.fromPromise(this.__version(requestOptions));
+    }
+
+    private async __version(requestOptions?: OpikApiClient.RequestOptions): Promise<core.WithRawResponse<unknown>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -233,13 +250,14 @@ export class OpikApiClient {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -248,12 +266,14 @@ export class OpikApiClient {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /is-alive/ver.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

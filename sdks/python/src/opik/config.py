@@ -129,6 +129,11 @@ class OpikConfig(pydantic_settings.BaseSettings):
     The amount of background threads that submit data to the backend.
     """
 
+    file_upload_background_workers: int = 16
+    """
+    The amount of background threads that upload files to the backend.
+    """
+
     console_logging_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
         "INFO"
     )
@@ -186,6 +191,16 @@ class OpikConfig(pydantic_settings.BaseSettings):
     which makes HTTP requests not via the opik package.
     """
 
+    enable_json_request_compression: bool = True
+    """
+    If set to True - Opik will compress the JSON request body.
+    """
+
+    guardrail_timeout: int = 30
+    """
+    Timeout for guardrail.validate calls in seconds. If response takes more than this, it will be considered failed and raises an Exception.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
@@ -210,6 +225,10 @@ class OpikConfig(pydantic_settings.BaseSettings):
     @property
     def is_localhost_installation(self) -> bool:
         return "localhost" in self.url_override
+
+    @property
+    def guardrails_backend_host(self) -> str:
+        return url_helpers.get_base_url(self.url_override) + "guardrails/"
 
     @pydantic.model_validator(mode="after")
     def _set_url_override_from_api_key(self) -> "OpikConfig":

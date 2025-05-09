@@ -6,8 +6,10 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNode } from "./JsonNode";
+import { ExperimentType } from "./ExperimentType";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 import { Comment } from "./Comment";
+import { PercentageValues } from "./PercentageValues";
 import { PromptVersionLink } from "./PromptVersionLink";
 
 export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.Raw, OpikApi.Experiment> =
@@ -17,6 +19,8 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
         name: core.serialization.string().optional(),
         metadata: JsonNode.optional(),
+        type: ExperimentType.optional(),
+        optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
         feedbackScores: core.serialization.property(
             "feedback_scores",
             core.serialization.list(FeedbackScoreAverage).optional(),
@@ -24,6 +28,9 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         comments: core.serialization.list(Comment).optional(),
         traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
+        duration: PercentageValues.optional(),
+        totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+        usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
@@ -41,10 +48,15 @@ export declare namespace Experiment {
         dataset_id?: string | null;
         name?: string | null;
         metadata?: JsonNode.Raw | null;
+        type?: ExperimentType.Raw | null;
+        optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
         comments?: Comment.Raw[] | null;
         trace_count?: number | null;
         created_at?: string | null;
+        duration?: PercentageValues.Raw | null;
+        total_estimated_cost?: number | null;
+        usage?: Record<string, number> | null;
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;

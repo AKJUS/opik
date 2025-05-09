@@ -14,8 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.comet.opik.api.ProjectStats.PercentageValues;
-
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 // This annotation is used to specify the strategy to be used for naming of properties for the annotated type. Required so that OpenAPI schema generation uses snake_case
@@ -25,7 +23,7 @@ public record Project(
         @JsonView( {
                 Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({Project.View.Public.class, View.Write.class}) @NotBlank String name,
-        @JsonView({Project.View.Public.class, View.Write.class}) ProjectVisibility visibility,
+        @JsonView({Project.View.Public.class, View.Write.class}) Visibility visibility,
         @JsonView({Project.View.Public.class,
                 View.Write.class}) String description,
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
@@ -43,7 +41,9 @@ public record Project(
         @JsonView({
                 Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Map<String, Double> usage,
         @JsonView({
-                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long traceCount){
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long traceCount,
+        @JsonView({
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long guardrailsFailedCount){
 
     public static class View {
         public static class Write {

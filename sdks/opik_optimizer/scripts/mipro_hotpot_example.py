@@ -1,37 +1,57 @@
-from opik_optimizer.demo import get_or_create_dataset
-from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer import MiproOptimizer
+import dspy
 
+from opik.evaluation.metrics import Equals
+from opik_optimizer import MiproOptimizer
+from opik_optimizer.demo import get_or_create_dataset, get_litellm_cache
+from opik_optimizer import (
+    MetricConfig,
+    TaskConfig,
+    from_dataset_field,
+    from_llm_response_text,
+)
+
+project_name = "optimize-mipro-hotpot"
 opik_dataset = get_or_create_dataset("hotpot-300")
+get_litellm_cache("test")
 
 optimizer = MiproOptimizer(
     model="openai/gpt-4o-mini",  # LiteLLM or OpenAI name
-    project_name="optimize-mipro-hotpot",
     temperature=0.1,
-    max_tokens=5000,
+    project_name=project_name,
+    num_threads=16,
 )
 
-initial_prompt = "Answer the question with a short, 1 to 5 word phrase"
+# Tools:
+def search_wikipedia(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
+        query, k=3
+    )
+    return [x["text"] for x in results]
 
-score = optimizer.evaluate_prompt(
+
+metric_config = MetricConfig(
+    metric=Equals(project_name=project_name),
+    inputs={
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="answer"),
+    },
+)
+
+task_config = TaskConfig(
+    instruction_prompt="Answer the question",
+    input_dataset_fields=["question"],
+    output_dataset_field="answer",
+    tools=[search_wikipedia],
+)
+
+result = optimizer.optimize_prompt(
     dataset=opik_dataset,
-    metric=LevenshteinRatio(),
-    prompt=initial_prompt,
-    # Algorithm-specific kwargs:
-    input_key="question",
-    output_key="answer",
+    metric_config=metric_config,
+    task_config=task_config,
 )
 
-print("Initial prompt:", initial_prompt)
-print("Score:", score)
-
-results = optimizer.optimize_prompt(
-    dataset=opik_dataset,
-    metric=LevenshteinRatio(),
-    prompt=initial_prompt,
-    # Algorithm-specific kwargs:
-    input_key="question",
-    output_key="answer",
-)
-
-print(results)
+result.display()

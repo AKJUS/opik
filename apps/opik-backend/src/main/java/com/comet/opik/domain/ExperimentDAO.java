@@ -6,11 +6,11 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -34,6 +34,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -48,6 +49,9 @@ import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
+import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
+import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
+import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
@@ -72,7 +76,9 @@ class ExperimentDAO {
                 last_updated_by,
                 prompt_version_id,
                 prompt_id,
-                prompt_versions
+                prompt_versions,
+                type,
+                optimization_id
             )
             SELECT
                 if(
@@ -88,7 +94,9 @@ class ExperimentDAO {
                 new.last_updated_by,
                 new.prompt_version_id,
                 new.prompt_id,
-                new.prompt_versions
+                new.prompt_versions,
+                new.type,
+                new.optimization_id
             FROM (
                 SELECT
                 :id AS id,
@@ -100,7 +108,9 @@ class ExperimentDAO {
                 :last_updated_by AS last_updated_by,
                 :prompt_version_id AS prompt_version_id,
                 :prompt_id AS prompt_id,
-                mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions
+                mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
+                :type AS type,
+                :optimization_id AS optimization_id
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -115,6 +125,133 @@ class ExperimentDAO {
             """;
 
     private static final String FIND = """
+            WITH experiments_final AS (
+                SELECT
+                    *
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                <if(dataset_id)> AND dataset_id = :dataset_id <endif>
+                <if(optimization_id)> AND optimization_id = :optimization_id <endif>
+                <if(types)> AND type IN :types <endif>
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
+                <if(id)> AND id = :id <endif>
+                <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
+                <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_items_final AS (
+                SELECT
+                    id, experiment_id, trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN (SELECT id FROM experiments_final)
+            ), trace_final AS (
+                SELECT
+                    id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+            ), experiment_durations AS (
+                SELECT
+                    experiment_id,
+                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration_values,
+                    count(DISTINCT trace_id) as trace_count,
+                    avgMap(usage) as usage,
+                    avg(total_estimated_cost) as total_estimated_cost
+                FROM (
+                    SELECT DISTINCT
+                        ei.experiment_id,
+                        ei.trace_id as trace_id,
+                        t.duration as duration,
+                        usage,
+                        total_estimated_cost
+                    FROM experiment_items_final ei
+                    LEFT JOIN (
+                        SELECT
+                            id,
+                            if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                NULL) as duration
+                        FROM traces final
+                        WHERE workspace_id = :workspace_id
+                        AND id IN (SELECT trace_id FROM experiment_items_final)
+                    ) AS t ON ei.trace_id = t.id
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            sumMap(usage) as usage,
+                            sum(total_estimated_cost) as total_estimated_cost
+                        FROM spans final
+                        WHERE workspace_id = :workspace_id
+                        GROUP BY workspace_id, project_id, trace_id
+                    ) AS s ON ei.trace_id = s.trace_id
+                )
+                GROUP BY experiment_id
+            ),
+            feedback_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(fs_avg.name),
+                        groupArray(fs_avg.avg_value)
+                    ) AS feedback_scores
+                FROM (
+                    SELECT
+                        et.experiment_id,
+                        fs.name,
+                        avg(fs.value) AS avg_value
+                    FROM (
+                        SELECT
+                            DISTINCT
+                                experiment_id,
+                                trace_id
+                        FROM experiment_items_final
+                    ) as et
+                    LEFT JOIN (
+                        SELECT
+                            name,
+                            entity_id AS trace_id,
+                            value
+                        FROM feedback_scores final
+                        WHERE workspace_id = :workspace_id
+                        AND entity_type = 'trace'
+                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    ) fs ON fs.trace_id = et.trace_id
+                    GROUP BY et.experiment_id, fs.name
+                    HAVING length(fs.name) > 0
+                ) as fs_avg
+                GROUP BY experiment_id
+            ),
+            comments_agg AS (
+                SELECT
+                    ei.experiment_id,
+                    groupUniqArrayArray(tc.comments_array) as comments_array_agg
+                FROM experiment_items ei
+                LEFT JOIN (
+                    SELECT
+                        entity_id,
+                        groupArray(tuple(*)) AS comments_array
+                    FROM (
+                        SELECT
+                            id,
+                            text,
+                            created_at,
+                            last_updated_at,
+                            created_by,
+                            last_updated_by,
+                            entity_id
+                        FROM comments
+                        WHERE workspace_id = :workspace_id
+                        AND entity_type = :entity_type
+                        ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY entity_id
+                ) AS tc ON ei.trace_id = tc.entity_id
+                WHERE ei.trace_id IN (SELECT id FROM trace_final)
+                GROUP BY ei.experiment_id
+            )
             SELECT
                 e.workspace_id as workspace_id,
                 e.dataset_id as dataset_id,
@@ -128,131 +265,18 @@ class ExperimentDAO {
                 e.prompt_version_id as prompt_version_id,
                 e.prompt_id as prompt_id,
                 e.prompt_versions as prompt_versions,
-                if(
-                    notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
-                    mapFromArrays(
-                        arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
-                        arrayMap(
-                            vName -> if(
-                                arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue -> vNameAndValue.2,
-                                        arrayFilter(
-                                            pair -> pair.1 = vName,
-                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                        )
-                                    )
-                                ) = 0,
-                                0,
-                                arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue -> vNameAndValue.2,
-                                        arrayFilter(
-                                            pair -> pair.1 = vName,
-                                            groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
-                                        )
-                                    )
-                                ) / arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue -> vNameAndValue.2,
-                                        arrayFilter(
-                                            pair -> pair.1 = vName,
-                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                        )
-                                    )
-                                )
-                            ),
-                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name)))
-                        )
-                    ),
-                    map()
-                ) as feedback_scores,
-                count (DISTINCT ei.trace_id) as trace_count,
-                groupUniqArrayArray(tc.comments_array) as comments_array_agg
-            FROM (
-                SELECT
-                    *
-                FROM experiments
-                WHERE workspace_id = :workspace_id
-                <if(dataset_id)> AND dataset_id = :dataset_id <endif>
-                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
-                <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
-                <if(id)> AND id = :id <endif>
-                <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
-                <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS e
-            LEFT JOIN (
-                SELECT DISTINCT
-                    experiment_id,
-                    trace_id
-                FROM experiment_items
-                WHERE workspace_id = :workspace_id
-            ) AS ei ON e.id = ei.experiment_id
-            LEFT JOIN (
-                SELECT
-                    entity_id as id,
-                    name,
-                    SUM(value) as total_value,
-                    COUNT(value) as count_value
-                FROM (
-                    SELECT
-                        entity_id,
-                        name,
-                        value
-                    FROM feedback_scores
-                    WHERE entity_type = :entity_type
-                    AND workspace_id = :workspace_id
-                    AND entity_id IN (
-                        SELECT
-                            id
-                        FROM traces
-                        WHERE workspace_id = :workspace_id
-                    )
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                )
-                GROUP BY
-                    entity_id,
-                    name
-            ) AS tfs ON ei.trace_id = tfs.id
-            LEFT JOIN (
-                SELECT
-                    entity_id,
-                    groupArray(tuple(*)) AS comments_array
-                FROM (
-                    SELECT
-                        id,
-                        text,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by,
-                        entity_id
-                    FROM comments
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                GROUP BY entity_id
-            ) AS tc ON ei.trace_id = tc.entity_id
-            GROUP BY
-                e.workspace_id,
-                e.dataset_id,
-                e.id,
-                e.name,
-                e.metadata as metadata,
-                e.created_at,
-                e.last_updated_at,
-                e.created_by,
-                e.last_updated_by,
-                e.prompt_version_id,
-                e.prompt_id,
-                e.prompt_versions
+                e.optimization_id as optimization_id,
+                e.type as type,
+                fs.feedback_scores as feedback_scores,
+                ed.trace_count as trace_count,
+                ed.duration_values AS duration,
+                ed.usage as usage,
+                ed.total_estimated_cost as total_estimated_cost,
+                ca.comments_array_agg as comments_array_agg
+            FROM experiments_final AS e
+            LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
+            LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+            LEFT JOIN comments_agg AS ca ON e.id = ca.experiment_id
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ;
@@ -266,6 +290,8 @@ class ExperimentDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
+                <if(optimization_id)> AND optimization_id = :optimization_id <endif>
+                <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
@@ -280,6 +306,9 @@ class ExperimentDAO {
                 *,
                 null AS feedback_scores,
                 null AS trace_count,
+                null AS duration,
+                null AS total_estimated_cost,
+                null AS usage,
                 null AS comments_array_agg
             FROM experiments
             WHERE workspace_id = :workspace_id
@@ -302,7 +331,7 @@ class ExperimentDAO {
             AND workspace_id = :workspace_id
             ;
             """;
-    private static final String FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_EXPERIMENT_IDS = """
+    private static final String FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_DATASET_IDS = """
             SELECT
             	dataset_id,
             	max(created_at) as created_at
@@ -323,7 +352,7 @@ class ExperimentDAO {
 
     private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
             SELECT
-                distinct dataset_id
+                distinct dataset_id, type
             FROM experiments
             WHERE workspace_id = :workspace_id
             <if(experiment_ids)> AND id IN :experiment_ids <endif>
@@ -366,7 +395,9 @@ class ExperimentDAO {
                 .bind("id", experiment.id())
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
-                .bind("metadata", getOrDefault(experiment.metadata()));
+                .bind("metadata", getStringOrDefault(experiment.metadata()))
+                .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
+                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "");
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -402,10 +433,6 @@ class ExperimentDAO {
                     .bind("workspace_id", workspaceId);
             return Flux.from(statement.execute());
         });
-    }
-
-    private String getOrDefault(JsonNode jsonNode) {
-        return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
     }
 
     @WithSpan
@@ -458,7 +485,7 @@ class ExperimentDAO {
                     .id(row.get("id", UUID.class))
                     .datasetId(row.get("dataset_id", UUID.class))
                     .name(row.get("name", String.class))
-                    .metadata(getOrDefault(row.get("metadata", String.class)))
+                    .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
@@ -466,10 +493,39 @@ class ExperimentDAO {
                     .feedbackScores(getFeedbackScores(row))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
+                    .duration(getDuration(row))
+                    .totalEstimatedCost(getTotalEstimatedCost(row))
+                    .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
+                    .optimizationId(Optional.ofNullable(row.get("optimization_id", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(UUID::fromString)
+                            .orElse(null))
+                    .type(ExperimentType.fromString(row.get("type", String.class)))
                     .build();
         });
+    }
+
+    private static BigDecimal getTotalEstimatedCost(Row row) {
+        return Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
+                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(null);
+    }
+
+    private static PercentageValues getDuration(Row row) {
+        return Optional.ofNullable(row.get("duration", List.class))
+                .filter(value -> !value.isEmpty()
+                        && value.stream().anyMatch(it -> BigDecimal.ZERO.compareTo((BigDecimal) it) < 0))
+                .map(durations -> new PercentageValues(
+                        getP(durations, 0),
+                        getP(durations, 1),
+                        getP(durations, 2)))
+                .orElse(null);
+    }
+
+    private static BigDecimal getP(List<BigDecimal> durations, int index) {
+        return durations.get(index);
     }
 
     private List<PromptVersionLink> getPromptVersions(Row row) {
@@ -495,22 +551,17 @@ class ExperimentDAO {
                 .toList();
     }
 
-    private JsonNode getOrDefault(String field) {
-        return Optional.ofNullable(field)
-                .filter(s -> !s.isBlank())
-                .map(JsonUtils::getJsonNodeFromString)
-                .orElse(null);
-    }
-
-    private static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
+    public static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
         List<FeedbackScoreAverage> feedbackScoresAvg = Optional
                 .ofNullable(row.get("feedback_scores", Map.class))
-                .map(map -> (Map<String, BigDecimal>) map)
+                .map(map -> (Map<String, ? extends Number>) map)
                 .orElse(Map.of())
                 .entrySet()
                 .stream()
                 .map(scores -> {
-                    return new FeedbackScoreAverage(scores.getKey(), scores.getValue());
+                    return new FeedbackScoreAverage(scores.getKey(),
+                            BigDecimal.valueOf(scores.getValue().doubleValue()).setScale(SCALE,
+                                    RoundingMode.HALF_EVEN));
                 })
                 .toList();
 
@@ -587,6 +638,11 @@ class ExperimentDAO {
                 .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
         Optional.ofNullable(criteria.promptId())
                 .ifPresent(promptId -> template.add("prompt_ids", promptId));
+        Optional.ofNullable(criteria.optimizationId())
+                .ifPresent(optimizationId -> template.add("optimization_id", optimizationId));
+        Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(types -> template.add("types", types));
         return template;
     }
 
@@ -599,6 +655,11 @@ class ExperimentDAO {
                 .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
         Optional.ofNullable(criteria.promptId())
                 .ifPresent(promptId -> statement.bind("prompt_ids", List.of(promptId).toArray(UUID[]::new)));
+        Optional.ofNullable(criteria.optimizationId())
+                .ifPresent(optimizationId -> statement.bind("optimization_id", optimizationId));
+        Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(types -> statement.bind("types", types));
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
         }
@@ -683,7 +744,7 @@ class ExperimentDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_EXPERIMENT_IDS);
+                    var statement = connection.createStatement(FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_DATASET_IDS);
                     statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new));
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
@@ -693,7 +754,7 @@ class ExperimentDAO {
     }
 
     @WithSpan
-    public Mono<List<ExperimentDatasetId>> getExperimentsDatasetIds(Set<UUID> ids) {
+    public Mono<List<DatasetEventInfoHolder>> getExperimentsDatasetInfo(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
         return Mono.from(connectionFactory.create())
@@ -704,12 +765,12 @@ class ExperimentDAO {
                     statement.bind("experiment_ids", ids.toArray(UUID[]::new));
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(this::mapDatasetId)
+                .flatMap(this::mapDatasetInfo)
                 .collectList();
     }
 
     @WithSpan
-    public Mono<List<ExperimentDatasetId>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
+    public Mono<List<DatasetEventInfoHolder>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
@@ -722,7 +783,7 @@ class ExperimentDAO {
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(this::mapDatasetId)
+                .flatMap(this::mapDatasetInfo)
                 .collectList();
     }
 
@@ -738,8 +799,9 @@ class ExperimentDAO {
         }
     }
 
-    private Publisher<ExperimentDatasetId> mapDatasetId(Result result) {
-        return result.map((row, rowMetadata) -> new ExperimentDatasetId(row.get("dataset_id", UUID.class)));
+    private Publisher<DatasetEventInfoHolder> mapDatasetInfo(Result result) {
+        return result.map((row, rowMetadata) -> new DatasetEventInfoHolder(row.get("dataset_id", UUID.class),
+                ExperimentType.fromString(row.get("type", String.class))));
     }
 
     public Mono<Long> getDailyCreatedCount() {

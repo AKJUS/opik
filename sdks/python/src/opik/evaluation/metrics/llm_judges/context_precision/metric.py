@@ -1,15 +1,10 @@
-import logging
 from typing import Any, List, Optional, Union
+
 import pydantic
-from opik import logging_messages
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
 
-from . import template
-from opik import exceptions
-from .. import parsing_helpers
-
-LOGGER = logging.getLogger(__name__)
+from . import template, parser
 
 
 class ContextPrecisionResponseFormat(pydantic.BaseModel):
@@ -31,6 +26,8 @@ class ContextPrecision(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "context_precision_metric".
         few_shot_examples: A list of few-shot examples to provide to the model. If None, uses the default few-shot examples.
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when
+            there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import ContextPrecision
@@ -50,10 +47,12 @@ class ContextPrecision(base_metric.BaseMetric):
             List[template.FewShotExampleContextPrecision]
         ] = None,
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
             track=track,
+            project_name=project_name,
         )
 
         self._init_model(model)
@@ -100,7 +99,7 @@ class ContextPrecision(base_metric.BaseMetric):
             input=llm_query, response_format=ContextPrecisionResponseFormat
         )
 
-        return self._parse_model_output(model_output)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self,
@@ -137,20 +136,4 @@ class ContextPrecision(base_metric.BaseMetric):
             input=llm_query, response_format=ContextPrecisionResponseFormat
         )
 
-        return self._parse_model_output(model_output)
-
-    def _parse_model_output(self, content: str) -> score_result.ScoreResult:
-        try:
-            dict_content = parsing_helpers.extract_json_content_or_raise(content)
-            score: float = float(dict_content["context_precision_score"])
-
-            if not (0.0 <= score <= 1.0):
-                score = 0.5
-
-            return score_result.ScoreResult(
-                name=self.name, value=score, reason=dict_content["reason"]
-            )
-        except Exception:
-            raise exceptions.MetricComputationError(
-                logging_messages.CONTEXT_PRECISION_SCORE_CALC_FAILED
-            )
+        return parser.parse_model_output(content=model_output, name=self.name)

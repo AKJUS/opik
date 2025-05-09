@@ -23,6 +23,7 @@ public record Dataset(
         @JsonView( {
                 Dataset.View.Public.class, Dataset.View.Write.class}) UUID id,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) @NotBlank String name,
+        @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Visibility visibility,
         @JsonView({Dataset.View.Public.class,
                 Dataset.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
         @JsonView({Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
@@ -34,9 +35,15 @@ public record Dataset(
         @JsonView({
                 Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long datasetItemsCount,
         @JsonView({
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long optimizationCount,
+        @JsonView({
                 Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant mostRecentExperimentAt,
         @JsonView({
-                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastCreatedExperimentAt){
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastCreatedExperimentAt,
+        @JsonView({
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant mostRecentOptimizationAt,
+        @JsonView({
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastCreatedOptimizationAt){
 
     public static class View {
 

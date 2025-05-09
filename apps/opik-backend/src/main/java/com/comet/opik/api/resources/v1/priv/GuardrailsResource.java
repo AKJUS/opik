@@ -1,11 +1,13 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailBatch;
 import com.comet.opik.domain.GuardrailsService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
+import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -39,12 +41,11 @@ public class GuardrailsResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
-    @Operation(operationId = "addGuardrailsBatch", summary = "Batch guardrails for traces", description = "Batch guardrails for traces", responses = {
+    @Operation(operationId = "createGuardrails", summary = "Create guardrails for traces in a batch", description = "Batch guardrails for traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
-    public Response addGuardrailsBatch(
-            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid GuardrailBatch batch) {
-
+    public Response createGuardrails(
+            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid @JsonView(Guardrail.View.Write.class) GuardrailBatch batch) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Add guardrails batch, size {} on  workspaceId '{}'", batch.guardrails().size(),

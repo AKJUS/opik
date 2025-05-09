@@ -17,7 +17,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
-import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -95,6 +94,8 @@ public interface TraceService {
     Mono<TraceThread> getThreadById(UUID projectId, String threadId);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
+
+    Mono<Long> countTraces(Set<UUID> projectIds);
 }
 
 @Slf4j
@@ -114,7 +115,6 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
-    private final @NonNull TraceSortingFactory sortingFactory;
 
     @Override
     @WithSpan
@@ -125,7 +125,7 @@ class TraceServiceImpl implements TraceService {
 
         return Mono.deferContextual(ctx -> IdGenerator
                 .validateVersionAsync(id, TRACE_KEY)
-                .then(Mono.defer(() -> getOrCreateProject(projectName)))
+                .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, TRACE_KEY),
                         Mono.defer(() -> insertTrace(trace, project, id)))
@@ -152,7 +152,7 @@ class TraceServiceImpl implements TraceService {
 
         return Mono.deferContextual(ctx -> {
             Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
-                    .flatMap(this::getOrCreateProject)
+                    .flatMap(projectService::getOrCreate)
                     .collectList()
                     .map(projects -> bindTraceToProjectAndId(batch, projects))
                     .subscribeOn(Schedulers.boundedElastic());
@@ -218,18 +218,10 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
-    private Mono<Project> getOrCreateProject(String projectName) {
-        return AsyncUtils.makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
-                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
-                .subscribeOn(Schedulers.boundedElastic()));
-    }
-
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id, Trace existingTrace) {
         return Mono.defer(() -> {
             // check if a partial trace exists caused by a patch request
-            if (existingTrace.name().isBlank()
-                    && existingTrace.startTime().equals(Instant.EPOCH)
+            if (existingTrace.startTime().equals(Instant.EPOCH)
                     && existingTrace.projectId().equals(project.id())) {
 
                 return create(newTrace, project, id);
@@ -252,16 +244,6 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
-    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
-        return switch (exception) {
-            case EntityAlreadyExistsException __ -> Mono.fromCallable(
-                    () -> projectService.findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                            .orElseThrow())
-                    .subscribeOn(Schedulers.boundedElastic());
-            default -> Mono.error(exception);
-        };
-    }
-
     @Override
     @WithSpan
     public Mono<Void> update(@NonNull TraceUpdate traceUpdate, @NonNull UUID id) {
@@ -269,7 +251,7 @@ class TraceServiceImpl implements TraceService {
         var projectName = WorkspaceUtils.getProjectName(traceUpdate.projectName());
 
         return Mono.deferContextual(ctx -> getProjectById(traceUpdate)
-                .switchIfEmpty(Mono.defer(() -> getOrCreateProject(projectName)))
+                .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, TRACE_KEY),
@@ -308,6 +290,13 @@ class TraceServiceImpl implements TraceService {
                     .flatMap(projects -> projects.stream().findFirst().map(Mono::just).orElseGet(Mono::empty))
                     .subscribeOn(Schedulers.boundedElastic());
         });
+    }
+
+    private TraceSearchCriteria findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
+        return criteria.toBuilder()
+                .projectId(projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(),
+                        criteria.projectName()))
+                .build();
     }
 
     private <T> Mono<T> failWithConflict(String error) {
@@ -355,15 +344,9 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
+        TraceSearchCriteria resolvedCriteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return template.nonTransaction(connection -> dao.find(size, page, criteria, connection));
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> template.nonTransaction(connection -> dao.find(
-                        size, page, criteria.toBuilder().projectId(project.id()).build(), connection)))
-                .switchIfEmpty(Mono.just(TracePage.empty(page, sortingFactory.getSortableFields())));
+        return template.nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection));
     }
 
     @Override
@@ -407,14 +390,9 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return dao.getStats(criteria)
-                    .switchIfEmpty(Mono.just(ProjectStats.empty()));
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> dao.getStats(criteria.toBuilder().projectId(project.id()).build()))
+        return dao.getStats(criteria)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 
@@ -439,14 +417,9 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Mono<TraceThreadPage> getTraceThreads(int page, int size, @NonNull TraceSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return dao.findThreads(size, page, criteria);
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> dao.findThreads(size, page, criteria.toBuilder().projectId(project.id()).build()))
-                .switchIfEmpty(Mono.just(TraceThreadPage.empty(page)));
+        return dao.findThreads(size, page, criteria);
     }
 
     @Override
@@ -483,6 +456,11 @@ class TraceServiceImpl implements TraceService {
                 .map(project -> criteria.toBuilder().projectId(project.id()).build())
                 .flatMapMany(newCriteria -> dao.search(limit, newCriteria))
                 .switchIfEmpty(Flux.empty());
+    }
+
+    @Override
+    public Mono<Long> countTraces(Set<UUID> projectIds) {
+        return dao.countTraces(projectIds);
     }
 
 }

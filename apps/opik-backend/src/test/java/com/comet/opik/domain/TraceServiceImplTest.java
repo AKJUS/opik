@@ -1,27 +1,24 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
-import com.comet.opik.api.error.EntityAlreadyExistsException;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
-import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.uuid.Generators;
 import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
+import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
@@ -30,15 +27,14 @@ import uk.co.jemos.podam.api.PodamFactoryImpl;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -88,61 +84,12 @@ class TraceServiceImplTest {
                 projectService,
                 () -> Generators.timeBasedEpochGenerator().generate(),
                 DUMMY_LOCK_SERVICE,
-                eventBus,
-                traceSortingFactory);
+                eventBus);
     }
 
     @Nested
     @DisplayName("Create Traces:")
     class CreateTrace {
-
-        @Test
-        @DisplayName("when concurrent trace creations with same project name conflict, then handle project already exists exception and create trace")
-        void create__whenConcurrentTraceCreationsWithSameProjectNameConflict__thenHandleProjectAlreadyExistsExceptionAndCreateTrace() {
-
-            // given
-            var projectName = "projectName";
-            var projectId = UUID.randomUUID();
-            var traceId = Generators.timeBasedEpochGenerator().generate();
-            var connection = mock(Connection.class);
-            String workspaceId = UUID.randomUUID().toString();
-            ArgumentCaptor<TracesCreated> eventCaptor = ArgumentCaptor.forClass(TracesCreated.class);
-
-            // when
-            when(projectService.getOrCreate(workspaceId, projectName, DEFAULT_USER))
-                    .thenThrow(new EntityAlreadyExistsException(new ErrorMessage(List.of("Project already exists"))));
-
-            when(projectService.findByNames(workspaceId, List.of(projectName)))
-                    .thenReturn(List.of(Project.builder().id(projectId).name(projectName).build())); // simulate project was already created
-
-            doNothing().when(eventBus).post(eventCaptor.capture());
-
-            when(template.nonTransaction(any()))
-                    .thenAnswer(invocation -> {
-                        TransactionTemplateAsync.TransactionCallback<String> trace = invocation.getArgument(0);
-
-                        return trace.execute(connection);
-                    });
-
-            when(traceDao.getPartialById(any()))
-                    .thenReturn(Mono.empty());
-
-            when(traceDao.insert(any(), any()))
-                    .thenReturn(Mono.just(traceId));
-
-            var actualResult = traceService.create(Trace.builder()
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .startTime(Instant.now())
-                    .build())
-                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
-                            .put(RequestContext.WORKSPACE_ID, workspaceId))
-                    .block();
-
-            // then
-            assertThat(actualResult).isEqualTo(traceId);
-            assertThat(eventCaptor.getValue().projectIds()).isEqualTo(Set.of(projectId));
-        }
 
         @Test
         @DisplayName("when creating traces with uuid version not 7, then return invalid uuid version exception")
@@ -153,7 +100,7 @@ class TraceServiceImplTest {
             var traceId = UUID.randomUUID();
 
             // then
-            Assertions.assertThrows(InvalidUUIDVersionException.class, () -> traceService.create(Trace.builder()
+            assertThrows(InvalidUUIDVersionException.class, () -> traceService.create(Trace.builder()
                     .id(traceId)
                     .projectName(projectName)
                     .startTime(Instant.now())
@@ -169,7 +116,7 @@ class TraceServiceImplTest {
 
         @Test
         @DisplayName("when project name is not found, then return empty page")
-        void find__whenProjectNameIsNotFound__thenReturnEmptyPage() {
+        void find__whenProjectNameIsNotFound__thenReturnNotFoundException() {
 
             // given
             var projectName = "projectName";
@@ -177,24 +124,18 @@ class TraceServiceImplTest {
             int size = 10;
             String workspaceId = UUID.randomUUID().toString();
 
-            // when
-            when(projectService.findByNames(workspaceId, List.of(projectName)))
-                    .thenReturn(List.of());
+            when(projectService.resolveProjectIdAndVerifyVisibility(null, projectName))
+                    .thenThrow(ErrorUtils.failWithNotFoundName("Project", projectName));
 
-            var actualResult = traceService
+            Exception exception = assertThrows(NotFoundException.class, () -> traceService
                     .find(page, size, TraceSearchCriteria.builder()
                             .projectName(projectName)
                             .build())
                     .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
                             .put(RequestContext.WORKSPACE_ID, workspaceId))
-                    .block();
+                    .block());
 
-            // then
-            Assertions.assertNotNull(actualResult);
-            assertThat(actualResult.page()).isEqualTo(page);
-            assertThat(actualResult.size()).isZero();
-            assertThat(actualResult.total()).isZero();
-            assertThat(actualResult.content()).isEmpty();
+            assertThat(exception.getMessage()).isEqualTo("Project name: %s not found".formatted(projectName));
         }
 
         @Test
@@ -224,6 +165,9 @@ class TraceServiceImplTest {
 
                         return callback.execute(connection);
                     });
+
+            when(projectService.resolveProjectIdAndVerifyVisibility(projectId, null))
+                    .thenReturn(projectId);
 
             var actualResult = traceService
                     .find(page, size, TraceSearchCriteria.builder().projectId(projectId).build())

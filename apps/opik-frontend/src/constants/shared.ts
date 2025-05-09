@@ -1,9 +1,9 @@
+import React from "react";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   ROW_HEIGHT,
 } from "@/types/shared";
-import React from "react";
 
 export const DEMO_PROJECT_NAME = "Demo Project";
 export const USER_FEEDBACK_NAME = "User feedback";
@@ -32,4 +32,5 @@ export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
   [COLUMN_TYPE.time]: "justify-start",
   [COLUMN_TYPE.dictionary]: "justify-start",
   [COLUMN_TYPE.numberDictionary]: "justify-start",
+  [COLUMN_TYPE.guardrails]: "justify-start",
 };

@@ -1,4 +1,4 @@
-from typing import List, Any, Optional, Dict
+from typing import List, Any, Optional, Dict, Mapping
 from unittest import mock
 
 import logging
@@ -10,9 +10,8 @@ LOGGER = logging.getLogger(__name__)
 
 def prepare_difference_report(expected: Any, actual: Any) -> str:
     try:
-        diff_report = deepdiff.DeepDiff(
-            expected, actual, exclude_types=[type(mock.ANY)]
-        ).pretty()
+        diff = deepdiff.DeepDiff(expected, actual, exclude_types=[type(mock.ANY)])
+        diff_report = diff.pretty()
 
         # Remove from report lines like that "X type changed from int to ANY_BUT_NONE"
         # But keep the lines like "X type changed from NoneType to ANY_BUT_NONE"
@@ -36,7 +35,7 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
         return diff_report_clean
     except Exception:
         LOGGER.debug("Failed to prepare difference report", exc_info=True)
-        return ""
+        return "Failed to prepare difference report"
 
 
 def assert_equal(expected, actual):
@@ -51,8 +50,8 @@ def assert_equal(expected, actual):
 
 
 def assert_dicts_equal(
-    dict1: Dict[str, Any],
-    dict2: Dict[str, Any],
+    dict1: Mapping[str, Any],
+    dict2: Mapping[str, Any],
     ignore_keys: Optional[List[str]] = None,
 ) -> None:
     dict1_copy, dict2_copy = {**dict1}, {**dict2}

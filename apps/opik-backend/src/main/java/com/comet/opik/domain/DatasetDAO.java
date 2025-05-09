@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
@@ -28,14 +29,15 @@ import java.util.UUID;
 @RegisterConstructorMapper(BiInformationResponse.BiInformation.class)
 public interface DatasetDAO {
 
-    @SqlUpdate("INSERT INTO datasets(id, name, description, workspace_id, created_by, last_updated_by) " +
-            "VALUES (:dataset.id, :dataset.name, :dataset.description, :workspace_id, :dataset.createdBy, :dataset.lastUpdatedBy)")
+    @SqlUpdate("INSERT INTO datasets(id, name, description, visibility, workspace_id, created_by, last_updated_by) " +
+            "VALUES (:dataset.id, :dataset.name, :dataset.description, COALESCE(:dataset.visibility, 'private'), :workspace_id, :dataset.createdBy, :dataset.lastUpdatedBy)")
     void save(@BindMethods("dataset") Dataset dataset, @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
             UPDATE datasets SET
                 name = :dataset.name,
                 description = :dataset.description,
+                visibility = COALESCE(:dataset.visibility, visibility),
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspace_id
             """)
@@ -65,11 +67,13 @@ public interface DatasetDAO {
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
-            " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> ")
+            " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
+            " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
-            @Define("with_experiments_only") boolean withExperimentsOnly);
+            @Define("with_experiments_only") boolean withExperimentsOnly,
+            @Define("with_optimizations_only") boolean withOptimizationOnly);
 
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
@@ -117,6 +121,7 @@ public interface DatasetDAO {
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
+            " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
@@ -126,6 +131,7 @@ public interface DatasetDAO {
             @Bind("workspace_id") String workspaceId,
             @Define("name") @Bind("name") String name,
             @Define("with_experiments_only") boolean withExperimentsOnly,
+            @Define("with_optimizations_only") boolean withOptimizationOnly,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
@@ -134,6 +140,10 @@ public interface DatasetDAO {
     @SqlBatch("UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<DatasetLastExperimentCreated> datasets);
+
+    @SqlBatch("UPDATE datasets SET last_created_optimization_at = :optimizationCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
+    int[] recordOptimizations(@Bind("workspace_id") String workspaceId,
+            @BindMethods Collection<DatasetLastOptimizationCreated> datasets);
 
     @SqlQuery("""
                 SELECT workspace_id, created_by AS user, COUNT(DISTINCT id) AS count

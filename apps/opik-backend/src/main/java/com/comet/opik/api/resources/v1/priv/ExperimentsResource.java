@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemSearchCriteria;
@@ -9,10 +10,10 @@ import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
-import com.comet.opik.api.ExperimentsDelete;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
-import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EntityType;
@@ -97,6 +98,8 @@ public class ExperimentsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("datasetId") UUID datasetId,
+            @QueryParam("optimization_id") UUID optimizationId,
+            @QueryParam("types") String typesQueryParam,
             @QueryParam("name") String name,
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
@@ -113,6 +116,10 @@ public class ExperimentsResource {
             sortingFields = List.of();
         }
 
+        var types = Optional.ofNullable(typesQueryParam)
+                .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
+                .orElse(null);
+
         var experimentSearchCriteria = ExperimentSearchCriteria.builder()
                 .datasetId(datasetId)
                 .name(name)
@@ -120,6 +127,8 @@ public class ExperimentsResource {
                 .datasetDeleted(datasetDeleted)
                 .promptId(promptId)
                 .sortingFields(sortingFields)
+                .optimizationId(optimizationId)
+                .types(types)
                 .build();
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
@@ -178,7 +187,7 @@ public class ExperimentsResource {
     @Operation(operationId = "deleteExperimentsById", summary = "Delete experiments by id", description = "Delete experiments by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
     public Response deleteExperimentsById(
-            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentsDelete.class))) @NotNull @Valid ExperimentsDelete request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid DeleteIdsHolder request) {
 
         log.info("Deleting experiments, count '{}'", request.ids());
         experimentService.delete(request.ids())
@@ -315,7 +324,7 @@ public class ExperimentsResource {
     public Response findFeedbackScoreNames(@QueryParam("experiment_ids") String experimentIdsQueryParam) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
-                .map(IdParamsValidator::getIds)
+                .map(ParamsValidator::getIds)
                 .orElse(Collections.emptySet());
 
         String workspaceId = requestContext.get().getWorkspaceId();

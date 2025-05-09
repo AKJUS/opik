@@ -1,7 +1,7 @@
 package com.comet.opik.podam;
 
 import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.GuardrailBatchItem;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -36,6 +36,7 @@ import uk.co.jemos.podam.api.RandomDataProviderStrategy;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackDefinition.CategoricalFeedbackDefinition;
@@ -69,12 +70,16 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceTypeManufacturer(ChatCompletionRequest.class, ChatCompletionRequestManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(StartMultipartUploadRequest.class,
                 StartMultipartUploadRequestManufacturer.INSTANCE);
-        strategy.addOrReplaceTypeManufacturer(GuardrailBatchItem.class, GuardrailCheckTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(Guardrail.class, GuardrailCheckTypeManufacturer.INSTANCE);
 
         return podamFactory;
     }
 
     public static <T> List<T> manufacturePojoList(PodamFactory podamFactory, Class<T> pojoClass) {
         return podamFactory.manufacturePojo(ArrayList.class, pojoClass);
+    }
+
+    public static <T> Set<T> manufacturePojoSet(PodamFactory podamFactory, Class<T> pojoClass) {
+        return podamFactory.manufacturePojo(Set.class, pojoClass);
     }
 }

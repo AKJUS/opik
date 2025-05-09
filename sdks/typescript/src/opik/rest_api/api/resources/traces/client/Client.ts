@@ -55,11 +55,19 @@ export class Traces {
      *         text: "text"
      *     })
      */
-    public async addTraceComment(
+    public addTraceComment(
         id: string,
         request: OpikApi.Comment,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__addTraceComment(id, request, requestOptions));
+    }
+
+    private async __addTraceComment(
+        id: string,
+        request: OpikApi.Comment,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -88,13 +96,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -103,6 +112,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -111,6 +121,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -129,11 +140,19 @@ export class Traces {
      *         source: "ui"
      *     })
      */
-    public async addTraceFeedbackScore(
+    public addTraceFeedbackScore(
         id: string,
         request: OpikApi.FeedbackScore,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__addTraceFeedbackScore(id, request, requestOptions));
+    }
+
+    private async __addTraceFeedbackScore(
+        id: string,
+        request: OpikApi.FeedbackScore,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -162,13 +181,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -177,6 +197,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -185,6 +206,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -198,11 +220,18 @@ export class Traces {
      * @example
      *     await client.traces.getTracesByProject()
      */
-    public async getTracesByProject(
+    public getTracesByProject(
         request: OpikApi.GetTracesByProjectRequest = {},
         requestOptions?: Traces.RequestOptions,
-    ): Promise<OpikApi.TracePagePublic> {
-        const { page, size, projectName, projectId, filters, truncate, sorting } = request;
+    ): core.HttpResponsePromise<OpikApi.TracePagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getTracesByProject(request, requestOptions));
+    }
+
+    private async __getTracesByProject(
+        request: OpikApi.GetTracesByProjectRequest = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.TracePagePublic>> {
+        const { page, size, projectName, projectId, filters, truncate, sorting, exclude } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -230,6 +259,10 @@ export class Traces {
 
         if (sorting != null) {
             _queryParams["sorting"] = sorting;
+        }
+
+        if (exclude != null) {
+            _queryParams["exclude"] = exclude;
         }
 
         const _response = await core.fetcher({
@@ -260,18 +293,22 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.TracePagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.TracePagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -280,12 +317,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/traces.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -298,11 +337,20 @@ export class Traces {
      *
      * @example
      *     await client.traces.createTrace({
-     *         name: "name",
      *         startTime: "2024-01-15T09:30:00Z"
      *     })
      */
-    public async createTrace(request: OpikApi.TraceWrite, requestOptions?: Traces.RequestOptions): Promise<void> {
+    public createTrace(
+        request: OpikApi.TraceWrite,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createTrace(request, requestOptions));
+    }
+
+    private async __createTrace(
+        request: OpikApi.TraceWrite,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -331,13 +379,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -346,12 +395,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/traces.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -365,12 +416,21 @@ export class Traces {
      * @example
      *     await client.traces.createTraces({
      *         traces: [{
-     *                 name: "name",
      *                 startTime: "2024-01-15T09:30:00Z"
      *             }]
      *     })
      */
-    public async createTraces(request: OpikApi.TraceBatchWrite, requestOptions?: Traces.RequestOptions): Promise<void> {
+    public createTraces(
+        request: OpikApi.TraceBatchWrite,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createTraces(request, requestOptions));
+    }
+
+    private async __createTraces(
+        request: OpikApi.TraceBatchWrite,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -399,13 +459,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -414,12 +475,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/traces/batch.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -433,7 +496,17 @@ export class Traces {
      * @example
      *     await client.traces.getTraceById("id")
      */
-    public async getTraceById(id: string, requestOptions?: Traces.RequestOptions): Promise<OpikApi.TracePublic> {
+    public getTraceById(
+        id: string,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.TracePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getTraceById(id, requestOptions));
+    }
+
+    private async __getTraceById(
+        id: string,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.TracePublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -461,18 +534,22 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.TracePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.TracePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -481,12 +558,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/traces/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -500,7 +579,14 @@ export class Traces {
      * @example
      *     await client.traces.deleteTraceById("id")
      */
-    public async deleteTraceById(id: string, requestOptions?: Traces.RequestOptions): Promise<void> {
+    public deleteTraceById(id: string, requestOptions?: Traces.RequestOptions): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteTraceById(id, requestOptions));
+    }
+
+    private async __deleteTraceById(
+        id: string,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -528,13 +614,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -543,12 +630,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling DELETE /v1/private/traces/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -563,11 +652,19 @@ export class Traces {
      * @example
      *     await client.traces.updateTrace("id")
      */
-    public async updateTrace(
+    public updateTrace(
         id: string,
         request: OpikApi.TraceUpdate = {},
         requestOptions?: Traces.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateTrace(id, request, requestOptions));
+    }
+
+    private async __updateTrace(
+        id: string,
+        request: OpikApi.TraceUpdate = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -596,13 +693,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -611,12 +709,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PATCH /v1/private/traces/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -632,10 +732,17 @@ export class Traces {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteTraceComments(
+    public deleteTraceComments(
         request: OpikApi.BatchDelete,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteTraceComments(request, requestOptions));
+    }
+
+    private async __deleteTraceComments(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -664,13 +771,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -679,6 +787,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -687,6 +796,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -703,11 +813,19 @@ export class Traces {
      *         name: "name"
      *     })
      */
-    public async deleteTraceFeedbackScore(
+    public deleteTraceFeedbackScore(
         id: string,
         request: OpikApi.DeleteFeedbackScore,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteTraceFeedbackScore(id, request, requestOptions));
+    }
+
+    private async __deleteTraceFeedbackScore(
+        id: string,
+        request: OpikApi.DeleteFeedbackScore,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -736,13 +854,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -751,6 +870,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -759,6 +879,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -774,10 +895,17 @@ export class Traces {
      *         threadIds: ["thread_ids"]
      *     })
      */
-    public async deleteTraceThreads(
+    public deleteTraceThreads(
         request: OpikApi.DeleteTraceThreads,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteTraceThreads(request, requestOptions));
+    }
+
+    private async __deleteTraceThreads(
+        request: OpikApi.DeleteTraceThreads,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -806,13 +934,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -821,6 +950,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -829,6 +959,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -844,7 +975,17 @@ export class Traces {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteTraces(request: OpikApi.BatchDelete, requestOptions?: Traces.RequestOptions): Promise<void> {
+    public deleteTraces(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteTraces(request, requestOptions));
+    }
+
+    private async __deleteTraces(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -873,13 +1014,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -888,12 +1030,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/traces/delete.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -907,10 +1051,17 @@ export class Traces {
      * @example
      *     await client.traces.findFeedbackScoreNames2()
      */
-    public async findFeedbackScoreNames2(
+    public findFeedbackScoreNames2(
         request: OpikApi.FindFeedbackScoreNames2Request = {},
         requestOptions?: Traces.RequestOptions,
-    ): Promise<string[]> {
+    ): core.HttpResponsePromise<string[]> {
+        return core.HttpResponsePromise.fromPromise(this.__findFeedbackScoreNames2(request, requestOptions));
+    }
+
+    private async __findFeedbackScoreNames2(
+        request: OpikApi.FindFeedbackScoreNames2Request = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<string[]>> {
         const { projectId } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -945,18 +1096,22 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.traces.findFeedbackScoreNames2.Response.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.traces.findFeedbackScoreNames2.Response.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -965,6 +1120,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -973,6 +1129,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -986,10 +1143,17 @@ export class Traces {
      * @example
      *     await client.traces.getTraceStats()
      */
-    public async getTraceStats(
+    public getTraceStats(
         request: OpikApi.GetTraceStatsRequest = {},
         requestOptions?: Traces.RequestOptions,
-    ): Promise<OpikApi.ProjectStatsPublic> {
+    ): core.HttpResponsePromise<OpikApi.ProjectStatsPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getTraceStats(request, requestOptions));
+    }
+
+    private async __getTraceStats(
+        request: OpikApi.GetTraceStatsRequest = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
         const { projectId, projectName, filters } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -1032,18 +1196,22 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectStatsPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProjectStatsPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -1052,12 +1220,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/traces/stats.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1074,11 +1244,19 @@ export class Traces {
      * @example
      *     await client.traces.getTraceComment("commentId", "traceId")
      */
-    public async getTraceComment(
+    public getTraceComment(
         commentId: string,
         traceId: string,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<OpikApi.Comment> {
+    ): core.HttpResponsePromise<OpikApi.Comment> {
+        return core.HttpResponsePromise.fromPromise(this.__getTraceComment(commentId, traceId, requestOptions));
+    }
+
+    private async __getTraceComment(
+        commentId: string,
+        traceId: string,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.Comment>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1106,22 +1284,26 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.Comment.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.Comment.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -1131,6 +1313,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1139,6 +1322,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1157,10 +1341,17 @@ export class Traces {
      *         threadId: "thread_id"
      *     })
      */
-    public async getTraceThread(
+    public getTraceThread(
         request: OpikApi.TraceThreadIdentifier,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<OpikApi.TraceThread> {
+    ): core.HttpResponsePromise<OpikApi.TraceThread> {
+        return core.HttpResponsePromise.fromPromise(this.__getTraceThread(request, requestOptions));
+    }
+
+    private async __getTraceThread(
+        request: OpikApi.TraceThreadIdentifier,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.TraceThread>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1189,22 +1380,26 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.TraceThread.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.TraceThread.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -1214,6 +1409,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1222,6 +1418,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1235,10 +1432,17 @@ export class Traces {
      * @example
      *     await client.traces.getTraceThreads()
      */
-    public async getTraceThreads(
+    public getTraceThreads(
         request: OpikApi.GetTraceThreadsRequest = {},
         requestOptions?: Traces.RequestOptions,
-    ): Promise<OpikApi.TraceThreadPage> {
+    ): core.HttpResponsePromise<OpikApi.TraceThreadPage> {
+        return core.HttpResponsePromise.fromPromise(this.__getTraceThreads(request, requestOptions));
+    }
+
+    private async __getTraceThreads(
+        request: OpikApi.GetTraceThreadsRequest = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.TraceThreadPage>> {
         const { page, size, projectName, projectId, truncate, filters } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -1293,18 +1497,22 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.TraceThreadPage.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.TraceThreadPage.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -1313,12 +1521,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/traces/threads.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1339,10 +1549,17 @@ export class Traces {
      *             }]
      *     })
      */
-    public async scoreBatchOfTraces(
+    public scoreBatchOfTraces(
         request: OpikApi.FeedbackScoreBatch,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__scoreBatchOfTraces(request, requestOptions));
+    }
+
+    private async __scoreBatchOfTraces(
+        request: OpikApi.FeedbackScoreBatch,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1371,13 +1588,14 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -1386,6 +1604,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1394,6 +1613,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1403,10 +1623,17 @@ export class Traces {
      * @throws {@link OpikApi.BadRequestError}
      * @throws {@link OpikApi.UnauthorizedError}
      */
-    public async searchTraces(
+    public searchTraces(
         request: OpikApi.TraceSearchStreamRequestPublic = {},
         requestOptions?: Traces.RequestOptions,
-    ): Promise<stream.Readable> {
+    ): core.HttpResponsePromise<stream.Readable> {
+        return core.HttpResponsePromise.fromPromise(this.__searchTraces(request, requestOptions));
+    }
+
+    private async __searchTraces(
+        request: OpikApi.TraceSearchStreamRequestPublic = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<stream.Readable>> {
         const _response = await core.fetcher<stream.Readable>({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1436,19 +1663,20 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -1458,12 +1686,14 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/traces/search.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1482,11 +1712,19 @@ export class Traces {
      *         text: "text"
      *     })
      */
-    public async updateTraceComment(
+    public updateTraceComment(
         commentId: string,
         request: OpikApi.Comment,
         requestOptions?: Traces.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateTraceComment(commentId, request, requestOptions));
+    }
+
+    private async __updateTraceComment(
+        commentId: string,
+        request: OpikApi.Comment,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1515,17 +1753,18 @@ export class Traces {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -1535,6 +1774,7 @@ export class Traces {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1543,6 +1783,7 @@ export class Traces {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
