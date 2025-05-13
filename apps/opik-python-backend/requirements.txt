@@ -3,7 +3,7 @@ certifi==2024.12.14
 charset-normalizer==3.4.1
 click==8.1.8
 docker==7.1.0
-Flask==3.1.0
+Flask==3.1.1
 gunicorn==23.0.0
 uuid6==2024.7.10
 opik==1.6.1
