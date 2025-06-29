@@ -1,10 +1,14 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { Calendar, Clock, Tag, Trash } from "lucide-react";
+import isBoolean from "lodash/isBoolean";
+import isFunction from "lodash/isFunction";
 
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
+import useAppStore from "@/store/AppStore";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/components/shared/Loader/Loader";
 import NoData from "@/components/shared/NoData/NoData";
@@ -40,6 +44,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   onClose,
   onRowChange,
 }) => {
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [height, setHeight] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
@@ -106,6 +112,20 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     });
   }, [onClose, mutate, threadId, projectId]);
 
+  const horizontalNavigation = useMemo(
+    () =>
+      isBoolean(hasNextRow) &&
+      isBoolean(hasPreviousRow) &&
+      isFunction(onRowChange)
+        ? {
+            onChange: onRowChange,
+            hasNext: hasNextRow,
+            hasPrevious: hasPreviousRow,
+          }
+        : undefined,
+    [hasNextRow, hasPreviousRow, onRowChange],
+  );
+
   const bodyStyle = {
     ...(height && { height: `${height}px` }),
   };
@@ -144,6 +164,34 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </span>
           </div>
         </TooltipWrapper>
+        <div className="flex flex-auto"></div>
+        <Button
+          variant="outline"
+          size="sm"
+          key="Go to project"
+          onClick={() => {
+            navigate({
+              to: "/$workspaceName/projects/$projectId/traces",
+              params: {
+                projectId,
+                workspaceName,
+              },
+              search: {
+                traces_filters: [
+                  {
+                    id: "thread_id_filter",
+                    field: "thread_id",
+                    type: COLUMN_TYPE.string,
+                    operator: "=",
+                    value: threadId,
+                  },
+                ],
+              },
+            });
+          }}
+        >
+          View all traces
+        </Button>
       </div>
     );
   };
@@ -209,11 +257,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       entity="thread"
       open={open}
       headerContent={renderHeaderContent()}
-      hasPreviousRow={hasPreviousRow}
-      hasNextRow={hasNextRow}
       onClose={onClose}
-      onRowChange={onRowChange}
       initialWidth={0.5}
+      horizontalNavigation={horizontalNavigation}
     >
       {renderContent()}
     </ResizableSidePanel>

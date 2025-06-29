@@ -94,7 +94,7 @@ public interface ProjectService {
 
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
-    UUID resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
+    Mono<UUID> resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
 
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
@@ -267,6 +267,7 @@ class ProjectServiceImpl implements ProjectService {
                 .usage(StatsMapper.getStatsUsage(projectStats))
                 .traceCount(StatsMapper.getStatsTraceCount(projectStats))
                 .guardrailsFailedCount(StatsMapper.getStatsGuardrailsFailedCount(projectStats))
+                .errorCount(StatsMapper.getStatsErrorCount(projectStats))
                 .build();
     }
 
@@ -530,6 +531,7 @@ class ProjectServiceImpl implements ProjectService {
                                 .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
                                 .guardrailsFailedCount(
                                         StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
+                                .errorCount(StatsMapper.getStatsErrorCount(projectStats.get(project.id())))
                                 .build();
                     })
                     .orElseThrow(this::createNotFoundError);
@@ -555,16 +557,35 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public UUID resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName) {
-        String workspaceId = requestContext.get().getWorkspaceId();
+    public Mono<UUID> resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-        Project project = verifyVisibility(projectId != null
-                ? get(projectId)
-                : findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                        .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName)))
-                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName));
+            return Mono.fromCallable(() -> {
 
-        return project.id();
+                if (projectId != null) {
+                    return findByIds(workspaceId, Set.of(projectId))
+                            .stream()
+                            .findFirst()
+                            .orElseThrow(() -> ErrorUtils.failWithNotFound("Project", projectId));
+                }
+
+                return findByNames(workspaceId, List.of(projectName))
+                        .stream()
+                        .findFirst()
+                        .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName));
+
+            }).subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(this::verifyVisibilityAsync)
+                    .switchIfEmpty(Mono.error(() -> {
+                        if (projectId != null) {
+                            return ErrorUtils.failWithNotFound("Project", projectId);
+                        }
+
+                        return ErrorUtils.failWithNotFoundName("Project", projectName);
+                    }))
+                    .map(Project::id);
+        });
     }
 
     private Optional<Project> verifyVisibility(@NonNull Project project) {
@@ -574,6 +595,18 @@ class ProjectServiceImpl implements ProjectService {
 
         return Optional.of(project)
                 .filter(p -> !publicOnly || p.visibility() == Visibility.PUBLIC);
+    }
+
+    private Mono<Project> verifyVisibilityAsync(@NonNull Project project) {
+        return Mono.deferContextual(ctx -> {
+
+            boolean publicOnly = Optional.<Visibility>of(ctx.get(RequestContext.VISIBILITY))
+                    .map(v -> v == Visibility.PUBLIC)
+                    .orElse(false);
+
+            return Mono.justOrEmpty(Optional.of(project))
+                    .filter(p -> !publicOnly || p.visibility() == Visibility.PUBLIC);
+        });
     }
 
     private Mono<Void> checkIfNeededToCreateProjectsWithContext(String workspaceId,
