@@ -256,7 +256,9 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_3_5_TURBO_16K = "openai/gpt-3.5-turbo-16k",
   OPENAI_GPT_3_5_TURBO_INSTRUCT = "openai/gpt-3.5-turbo-instruct",
   OPENAI_GPT_4 = "openai/gpt-4",
+  OPENAI_GPT_4_ONLINE = "openai/gpt-4:online",
   OPENAI_GPT_4O = "openai/gpt-4o",
+  OPENAI_GPT_4O_ONLINE = "openai/gpt-4o:online",
   OPENAI_GPT_4O_2024_05_13 = "openai/gpt-4o-2024-05-13",
   OPENAI_GPT_4O_2024_08_06 = "openai/gpt-4o-2024-08-06",
   OPENAI_GPT_4O_2024_11_20 = "openai/gpt-4o-2024-11-20",
@@ -363,6 +365,9 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_1_5_FLASH = "gemini-1.5-flash",
   GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
   GEMINI_1_5_PRO = "gemini-1.5-pro",
+  GEMINI_2_5_PRO = "gemini-2.5-pro",
+  GEMINI_2_5_FLASH = "gemini-2.5-flash",
+  GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "gemini-2.5-flash-lite-preview-06-17",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
@@ -371,13 +376,15 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_2_5_PRO_EXP_03_25 = "vertex_ai/gemini-2.5-pro-exp-03-25",
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
   VERTEX_AI_GEMINI_2_0_FLASH_LITE = "vertex_ai/gemini-2.0-flash-lite-001",
+  VERTEX_AI_GEMINI_2_5_PRO = "vertex_ai/gemini-2.5-pro",
+  VERTEX_AI_GEMINI_2_5_FLASH = "vertex_ai/gemini-2.5-flash",
+  VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "vertex_ai/gemini-2.5-flash-lite-preview-06-17",
 }
 
 export type PROVIDER_MODELS_TYPE = {
   [key in PROVIDER_TYPE]: {
     value: PROVIDER_MODEL_TYPE;
     label: string;
-    structuredOutput?: boolean;
   }[];
 };
 

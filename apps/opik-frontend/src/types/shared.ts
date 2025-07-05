@@ -17,9 +17,11 @@ export const COLUMN_NAME_ID = "name";
 export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
+export const COLUMN_USAGE_ID = "usage";
 export const COLUMN_COMMENTS_ID = "comments";
 export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
+export const COLUMN_DATASET_ID = "dataset";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 
@@ -33,6 +35,8 @@ export enum COLUMN_TYPE {
   numberDictionary = "feedback_scores_number",
   cost = "cost",
   guardrails = "guardrails",
+  threadStatus = "thread_status",
+  errors = "errors",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {
@@ -75,6 +79,7 @@ export type ColumnData<T> = {
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
   sortable?: boolean;
+  disposable?: boolean;
 };
 
 export type DynamicColumn = {
