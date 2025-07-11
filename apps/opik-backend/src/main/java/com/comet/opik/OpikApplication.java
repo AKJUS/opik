@@ -2,6 +2,7 @@ package com.comet.opik;
 
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
 import com.comet.opik.infrastructure.ConfigurationModule;
+import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
@@ -18,6 +19,7 @@ import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.job.JobGuiceyInstaller;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
@@ -70,7 +72,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         bootstrap.addBundle(LiquibaseBundle.builder()
                 .name(DB_APP_STATE_NAME)
                 .migrationsFileName(DB_APP_STATE_MIGRATIONS_FILE_NAME)
-                .dataSourceFactoryFunction(OpikConfiguration::getDatabase)
+                .dataSourceFactoryFunction(conf -> DatabaseUtils.filterProperties(conf.getDatabase()))
                 .build());
         bootstrap.addBundle(LiquibaseBundle.builder()
                 .name(DB_APP_ANALYTICS_NAME)
@@ -78,13 +80,15 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
                 .build());
         bootstrap.addBundle(GuiceBundle.builder()
-                .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> conf.getDatabase())
+                .bundles(JdbiBundle
+                        .<OpikConfiguration>forDatabase(
+                                (conf, env) -> DatabaseUtils.filterProperties(conf.getDatabase()))
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new CacheModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
-                        new AwsModule(), new UsageLimitModule(), new VertexAIModule())
+                        new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()

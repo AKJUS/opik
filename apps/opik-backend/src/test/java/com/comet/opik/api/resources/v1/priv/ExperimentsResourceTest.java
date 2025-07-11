@@ -16,8 +16,7 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
@@ -29,6 +28,9 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.filter.ExperimentField;
+import com.comet.opik.api.filter.ExperimentFilter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -38,6 +40,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -77,7 +80,6 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,7 +108,6 @@ import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -122,15 +123,15 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -148,6 +149,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.stream.Collectors.averagingLong;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
@@ -190,7 +192,7 @@ class ExperimentsResourceTest {
     private final AppContextConfig contextConfig;
 
     @RegisterApp
-    private final TestDropwizardAppExtension app;
+    private final TestDropwizardAppExtension APP;
 
     {
         Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
@@ -199,6 +201,9 @@ class ExperimentsResourceTest {
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+        MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
         contextConfig = AppContextConfig.builder()
                 .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
@@ -209,7 +214,7 @@ class ExperimentsResourceTest {
                 .mockEventBus(Mockito.mock(EventBus.class))
                 .build();
 
-        app = newTestDropwizardAppExtension(contextConfig);
+        APP = newTestDropwizardAppExtension(contextConfig);
     }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -225,15 +230,9 @@ class ExperimentsResourceTest {
     private SpanResourceClient spanResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+    void beforeAll(ClientSupport client) {
 
-        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);
@@ -908,6 +907,116 @@ class ExperimentsResourceTest {
 
         @ParameterizedTest
         @MethodSource
+        void findByFilterMetadata(Operator operator, String key, String value) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var name = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var experiments = experimentResourceClient.generateExperimentList()
+                    .stream()
+                    .map(experiment -> experiment.toBuilder()
+                            .datasetName(datasetName)
+                            .name(name)
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                                            "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                            .build())
+                    .toList();
+            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+                    apiKey, workspaceName));
+
+            var unexpectedExperiments = List.of(generateExperiment());
+
+            unexpectedExperiments
+                    .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+
+            var pageSize = experiments.size() - 2;
+            var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
+                    .datasetId();
+            var expectedExperiments1 = experiments.subList(pageSize - 1, experiments.size()).reversed();
+            var expectedExperiments2 = experiments.subList(0, pageSize - 1).reversed();
+            var expectedTotal = experiments.size();
+
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.METADATA)
+                    .operator(operator)
+                    .key(key)
+                    .value(value)
+                    .build());
+
+            findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+            findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+        }
+
+        private Stream<Arguments> findByFilterMetadata() {
+            return Stream.of(
+                    Arguments.of(
+                            Operator.EQUAL,
+                            "$.model[0].version",
+                            "OPENAI, CHAT-GPT 4.0"),
+                    Arguments.of(
+                            Operator.NOT_EQUAL,
+                            "$.model[0].version",
+                            "OPENAI, CHAT-GPT Something"),
+                    Arguments.of(
+                            Operator.EQUAL,
+                            "model[0].year",
+                            "2024"),
+                    Arguments.of(
+                            Operator.NOT_EQUAL,
+                            "model[0].year",
+                            "2023"),
+                    Arguments.of(
+                            Operator.EQUAL,
+                            "model[0].trueFlag",
+                            "TRUE"),
+                    Arguments.of(
+                            Operator.NOT_EQUAL,
+                            "model[0].trueFlag",
+                            "FALSE"),
+                    Arguments.of(
+                            Operator.EQUAL,
+                            "model[0].nullField",
+                            "NULL"),
+                    Arguments.of(
+                            Operator.NOT_EQUAL,
+                            "model[0].version",
+                            "NULL"),
+                    Arguments.of(
+                            Operator.CONTAINS,
+                            "$.model[0].version",
+                            "CHAT-GPT"),
+                    Arguments.of(
+                            Operator.CONTAINS,
+                            "$.model[0].year",
+                            "02"),
+                    Arguments.of(
+                            Operator.CONTAINS,
+                            "$.model[0].trueFlag",
+                            "TRU"),
+                    Arguments.of(
+                            Operator.CONTAINS,
+                            "$.model[0].nullField",
+                            "NUL"),
+                    Arguments.of(
+                            Operator.GREATER_THAN,
+                            "model[0].year",
+                            "2021"),
+                    Arguments.of(
+                            Operator.LESS_THAN,
+                            "model[0].year",
+                            "2031"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
         void findByOptimizationIdAndType(ExperimentType type) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -1037,7 +1146,7 @@ class ExperimentsResourceTest {
                     .of(scoreForTrace1.stream(), scoreForTrace2.stream(), scoreForTrace3.stream(),
                             scoreForTrace4.stream(), scoreForTrace5.stream())
                     .flatMap(Function.identity())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1176,7 +1285,7 @@ class ExperimentsResourceTest {
                     .of(scoreForTrace1.stream(), scoreForTrace2.stream(), scoreForTrace3.stream(),
                             scoreForTrace4.stream(), scoreForTrace5.stream(), scoreForTrace6.stream())
                     .flatMap(Function.identity())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1419,6 +1528,7 @@ class ExperimentsResourceTest {
             var expectedExperiment = experiment.toBuilder()
                     .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
                     .totalEstimatedCost(getTotalEstimatedCost(spans))
+                    .totalEstimatedCostAvg(getTotalEstimatedCostAvg(spans))
                     .usage(getUsage(spans))
                     .build();
 
@@ -1431,10 +1541,10 @@ class ExperimentsResourceTest {
                     .map(Span::usage)
                     .map(Map::entrySet)
                     .flatMap(Collection::stream)
-                    .collect(groupingBy(Map.Entry::getKey, Collectors.averagingLong(e -> e.getValue())));
+                    .collect(groupingBy(Map.Entry::getKey, averagingLong(Map.Entry::getValue)));
         }
 
-        private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+        private BigDecimal getTotalEstimatedCostAvg(List<Span> spans) {
 
             BigDecimal accumulated = spans.stream()
                     .map(Span::totalEstimatedCost)
@@ -1442,6 +1552,12 @@ class ExperimentsResourceTest {
                     .orElse(BigDecimal.ZERO);
 
             return accumulated.divide(BigDecimal.valueOf(spans.size()), ValidationUtils.SCALE, RoundingMode.HALF_UP);
+        }
+
+        private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+            return spans.stream()
+                    .map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
         @ParameterizedTest
@@ -1493,7 +1609,7 @@ class ExperimentsResourceTest {
             var traceIdToScoresMap = Stream
                     .of(scoreForTrace1.stream())
                     .flatMap(Function.identity())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1683,6 +1799,17 @@ class ExperimentsResourceTest {
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
                             SortingField.builder().field(SortableFields.TRACE_COUNT).direction(Direction.DESC)
+                                    .build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.duration().p50())
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field("duration.p50").direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.duration().p50()).reversed()
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field("duration.p50").direction(Direction.DESC)
                                     .build()));
         }
 
@@ -1696,7 +1823,8 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class);
+            var scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchItem.class);
             var experiments = IntStream.range(0, 5)
                     .mapToObj(i -> experimentResourceClient.createPartialExperiment()
                             .lastUpdatedBy(USER)
@@ -1717,7 +1845,7 @@ class ExperimentsResourceTest {
                     .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
             findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
                     expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
-                    null, null);
+                    null, null, null);
         }
 
         @ParameterizedTest
@@ -1729,7 +1857,8 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class);
+            var scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchItem.class);
             var experiments = IntStream.range(0, 5)
                     .mapToObj(i -> experimentResourceClient.createPartialExperiment()
                             .lastUpdatedBy(USER)
@@ -1768,7 +1897,7 @@ class ExperimentsResourceTest {
 
             findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
                     expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
-                    null, null);
+                    null, null, null);
         }
 
         @ParameterizedTest
@@ -1792,6 +1921,7 @@ class ExperimentsResourceTest {
                     UUID.randomUUID(),
                     List.of(new SortingField(field, Direction.ASC)),
                     null,
+                    null,
                     null)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
@@ -1810,7 +1940,10 @@ class ExperimentsResourceTest {
         int tracesNumber = PodamUtils.getIntegerInRange(1, 10);
 
         List<Trace> traces = IntStream.range(0, tracesNumber)
-                .mapToObj(i -> podamFactory.manufacturePojo(Trace.class))
+                .mapToObj(i -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .startTime(Instant.now())
+                        .endTime(Instant.now().plus(PodamUtils.getIntegerInRange(100, 2000), ChronoUnit.MILLIS))
+                        .build())
                 .toList();
 
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1949,7 +2082,8 @@ class ExperimentsResourceTest {
             Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
             UUID promptId) {
         findAndAssert(workspaceName, page, pageSize, datasetId, name, expectedExperiments, expectedTotal,
-                unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null, null, null);
+                unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null, null, null,
+                null);
     }
 
     private void findAndAssert(
@@ -1968,7 +2102,7 @@ class ExperimentsResourceTest {
             Set<ExperimentType> types) {
         findAndAssert(workspaceName, page, pageSize, datasetId, name, expectedExperiments, expectedTotal,
                 unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null,
-                optimizationId, types);
+                optimizationId, types, null);
     }
 
     public Response findExperiment(String workspaceName,
@@ -1981,7 +2115,8 @@ class ExperimentsResourceTest {
             UUID promptId,
             List<SortingField> sortingFields,
             UUID optimizationId,
-            Set<ExperimentType> types) {
+            Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters) {
 
         WebTarget webTarget = client.target(getExperimentsPath())
                 .queryParam("page", page)
@@ -2012,6 +2147,10 @@ class ExperimentsResourceTest {
             webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
         }
 
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
         return webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -2034,10 +2173,11 @@ class ExperimentsResourceTest {
             UUID promptId,
             List<SortingField> sortingFields,
             UUID optimizationId,
-            Set<ExperimentType> types) {
+            Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters) {
         try (var actualResponse = findExperiment(
                 workspaceName, apiKey, page, pageSize, datasetId, name, datasetDeleted, promptId, sortingFields,
-                optimizationId, types)) {
+                optimizationId, types, filters)) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             var actualPage = actualResponse.readEntity(ExperimentPage.class);
             assertThat(actualPage.page()).isEqualTo(page);
@@ -2184,16 +2324,11 @@ class ExperimentsResourceTest {
                                     return buildVersionLink(promptVersion);
                                 })
                                 .toList();
-                        var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(datasetName)
                                 .name(name)
                                 .promptVersion(promptVersions.getFirst())
                                 .promptVersions(promptVersions)
-                                .usage(null)
-                                .duration(null)
-                                .totalEstimatedCost(null)
-                                .type(ExperimentType.REGULAR)
-                                .optimizationId(null)
                                 .build();
                         // Only 2 scores per experiment is enough for this test
                         var scores = IntStream.range(0, 2)
@@ -2238,6 +2373,7 @@ class ExperimentsResourceTest {
                         List<UUID> traceIds = experimentResourceClient
                                 .getExperimentItems(experiment.name(), API_KEY, TEST_WORKSPACE)
                                 .stream()
+                                .filter(item -> item.experimentId().equals(experiment.id()))
                                 .map(ExperimentItem::traceId)
                                 .distinct()
                                 .toList();
@@ -2347,7 +2483,7 @@ class ExperimentsResourceTest {
 
             var traceIdToScoresMap = Stream
                     .concat(Stream.concat(scoreForTrace1.stream(), scoreForTrace2.stream()), scoreForTrace3.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -2422,7 +2558,7 @@ class ExperimentsResourceTest {
 
             var traceIdToScoresMap = Stream
                     .concat(Stream.concat(scoreForTrace1.stream(), scoreForTrace2.stream()), scoreForTrace3.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -2489,14 +2625,9 @@ class ExperimentsResourceTest {
             var versionLink = new PromptVersionLink(promptVersion.id(), promptVersion.commit(),
                     promptVersion.promptId());
 
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+            var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .promptVersion(versionLink)
                     .promptVersions(List.of(versionLink))
-                    .duration(null)
-                    .usage(null)
-                    .totalEstimatedCost(null)
-                    .type(ExperimentType.REGULAR)
-                    .optimizationId(null)
                     .build();
 
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -2668,7 +2799,7 @@ class ExperimentsResourceTest {
                     .of(scoreForTrace1.stream(), scoreForTrace2.stream(), scoreForTrace3.stream(),
                             scoreForTrace4.stream(), scoreForTrace5.stream(), scoreForTrace6.stream())
                     .flatMap(Function.identity())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -2780,14 +2911,15 @@ class ExperimentsResourceTest {
         return null;
     }
 
-    private Map<String, BigDecimal> getExpectedScores(Map<UUID, List<FeedbackScoreBatchItem>> traceIdToScoresMap) {
+    private Map<String, BigDecimal> getExpectedScores(
+            Map<UUID, List<FeedbackScoreBatchItem>> traceIdToScoresMap) {
         return traceIdToScoresMap
                 .values()
                 .stream()
                 .flatMap(Collection::stream)
                 .collect(groupingBy(
-                        FeedbackScoreBatchItem::name,
-                        mapping(FeedbackScoreBatchItem::value, toList())))
+                        FeedbackScoreItem::name,
+                        mapping(FeedbackScoreItem::value, toList())))
                 .entrySet()
                 .stream()
                 .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))
@@ -2809,14 +2941,17 @@ class ExperimentsResourceTest {
                         .experimentId(expectedExperiment.id())
                         .traceId(traces.get(i / totalNumberOfScoresPerTrace).id())
                         .feedbackScores(
-                                traceIdToScoresMap.get(traces.get(i / totalNumberOfScoresPerTrace).id()).stream()
+                                traceIdToScoresMap.get(traces.get(i / totalNumberOfScoresPerTrace).id())
+                                        .stream()
+
                                         .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                                         .toList())
                         .build())
                 .toList();
     }
 
-    private List<FeedbackScoreBatchItem> copyScoresFrom(List<FeedbackScoreBatchItem> scoreForTrace, Trace trace) {
+    private List<FeedbackScoreBatchItem> copyScoresFrom(List<FeedbackScoreBatchItem> scoreForTrace,
+            Trace trace) {
         return scoreForTrace
                 .stream()
                 .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
@@ -2824,7 +2959,7 @@ class ExperimentsResourceTest {
                         .projectName(trace.projectName())
                         .value(podamFactory.manufacturePojo(BigDecimal.class).abs())
                         .build())
-                .toList();
+                .collect(toList());
     }
 
     private List<FeedbackScoreBatchItem> makeTraceScores(Trace trace) {
@@ -2972,7 +3107,6 @@ class ExperimentsResourceTest {
 
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
             createRequest.experimentItems()
-                    .stream()
                     .forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
 
             var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
@@ -2995,14 +3129,13 @@ class ExperimentsResourceTest {
 
     private ExperimentItemsBatch createItemsWithoutTrace() {
         ExperimentItemsBatch itemsBatch = getExperimentItemsBatch();
-        var createRequest = itemsBatch.toBuilder()
+        return itemsBatch.toBuilder()
                 .experimentItems(itemsBatch.experimentItems().stream()
                         .map(experimentItem -> experimentItem.toBuilder()
                                 .traceVisibilityMode(null)
                                 .build())
                         .collect(toSet()))
                 .build();
-        return createRequest;
     }
 
     @Nested
@@ -3117,7 +3250,7 @@ class ExperimentsResourceTest {
 
             var traceIdToScoresMap = Stream
                     .concat(traceWithScores1.getRight().stream(), traceWithScores2.getRight().stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -3372,7 +3505,7 @@ class ExperimentsResourceTest {
                     spans.stream()
                             .map(it -> it.usage().entrySet()
                                     .stream()
-                                    .collect(Collectors.toMap(
+                                    .collect(toMap(
                                             Map.Entry::getKey,
                                             entry -> entry.getValue().longValue())))
                             .toList());
@@ -3401,19 +3534,21 @@ class ExperimentsResourceTest {
             return span;
         }
 
-        private Pair<Trace, List<FeedbackScoreBatchItem>> createTraceWithScores(String apiKey, String workspaceName) {
+        private Pair<Trace, List<FeedbackScoreBatchItem>> createTraceWithScores(String apiKey,
+                String workspaceName) {
             var trace = podamFactory.manufacturePojo(Trace.class);
             traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Creating 5 scores peach each of the two traces above
-            return Pair.of(trace, PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
-                    .stream()
-                    .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                            .id(trace.id())
-                            .projectName(trace.projectName())
-                            .value(podamFactory.manufacturePojo(BigDecimal.class))
-                            .build())
-                    .toList());
+            return Pair.of(trace,
+                    PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
+                                    .id(trace.id())
+                                    .projectName(trace.projectName())
+                                    .value(podamFactory.manufacturePojo(BigDecimal.class))
+                                    .build())
+                            .collect(toList()));
         }
     }
 
@@ -3647,7 +3782,8 @@ class ExperimentsResourceTest {
             // Create unexpected feedback scores
             var unexpectedProject = podamFactory.manufacturePojo(Project.class);
 
-            List<List<FeedbackScoreBatchItem>> unexpectedScores = traceResourceClient.createMultiValueScores(otherNames,
+            List<List<FeedbackScoreBatchItem>> unexpectedScores = traceResourceClient.createMultiValueScores(
+                    otherNames,
                     unexpectedProject,
                     apiKey, workspaceName);
 
@@ -3695,7 +3831,7 @@ class ExperimentsResourceTest {
         Stream.of(multipleValuesFeedbackScoreList, singleValueScores)
                 .flatMap(List::stream)
                 .flatMap(List::stream)
-                .map(FeedbackScoreBatchItem::id)
+                .map(FeedbackScoreItem::id)
                 .distinct()
                 .forEach(traceId -> {
                     var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()

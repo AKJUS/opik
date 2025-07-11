@@ -6,17 +6,19 @@ from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 from langchain_core.tracers.schemas import Run
 
-from opik import dict_utils, opik_context, llm_usage
+from opik import dict_utils, llm_usage
 from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
-    google_run_helpers,
+    vertexai_run_helpers,
+    google_generative_ai_helpers,
     openai_run_helpers,
     anthropic_run_helpers,
     anthropic_vertexai_run_helpers,
     opik_encoder_extension,
+    groq_run_helpers,
 )
 from ...api_objects import helpers, opik_client
 from opik import context_storage
@@ -139,7 +141,9 @@ class OpikTracer(BaseTracer):
                 trace_data.input = run_dict["inputs"]
 
             trace_data.init_end_time().update(output=output, error_info=error_info)
-            trace_ = self._opik_client.trace(**trace_data.__dict__)
+            trace_ = self._opik_client.trace(**trace_data.as_parameters)
+
+            assert trace_ is not None
             self._created_traces.append(trace_)
             self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
 
@@ -171,7 +175,7 @@ class OpikTracer(BaseTracer):
             )
             return None, new_span_data
 
-        current_span_data = opik_context.get_current_span_data()
+        current_span_data = self._opik_context_storage.top_span_data()
         self._root_run_external_parent_span_id.set(
             current_span_data.id if current_span_data is not None else None
         )
@@ -183,7 +187,7 @@ class OpikTracer(BaseTracer):
             )
             return None, new_span_data
 
-        current_trace_data = opik_context.get_current_trace_data()
+        current_trace_data = self._opik_context_storage.get_trace_data()
         if current_trace_data is not None:
             new_span_data = self._attach_span_to_existing_trace(
                 run_dict=run_dict,
@@ -308,7 +312,12 @@ class OpikTracer(BaseTracer):
             new_trace_data, new_span_data = self._track_root_run(run_dict)
             if new_trace_data is not None:
                 self._opik_context_storage.set_trace_data(new_trace_data)
+                if self._opik_client.config.log_start_trace_span:
+                    self._opik_client.trace(**new_trace_data.as_start_parameters)
+
             self._opik_context_storage.add_span_data(new_span_data)
+            if self._opik_client.config.log_start_trace_span:
+                self._opik_client.span(**new_span_data.as_start_parameters)
             return
 
         parent_span_data = self._span_data_map[run.parent_run_id]
@@ -337,6 +346,8 @@ class OpikTracer(BaseTracer):
             ]
 
         self._opik_context_storage.add_span_data(new_span_data)
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.span(**new_span_data.as_start_parameters)
 
     def _process_end_span(self, run: "Run") -> None:
         try:
@@ -348,10 +359,14 @@ class OpikTracer(BaseTracer):
                 usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
             elif anthropic_vertexai_run_helpers.is_anthropic_vertexai_run(run):
                 usage_info = anthropic_vertexai_run_helpers.get_llm_usage_info(run_dict)
-            elif google_run_helpers.is_google_run(run):
-                usage_info = google_run_helpers.get_llm_usage_info(run_dict)
+            elif vertexai_run_helpers.is_vertexai_run(run):
+                usage_info = vertexai_run_helpers.get_llm_usage_info(run_dict)
+            elif google_generative_ai_helpers.is_google_generative_ai_run(run):
+                usage_info = google_generative_ai_helpers.get_llm_usage_info(run_dict)
             elif anthropic_run_helpers.is_anthropic_run(run):
                 usage_info = anthropic_run_helpers.get_llm_usage_info(run_dict)
+            elif groq_run_helpers.is_groq_run(run):
+                usage_info = groq_run_helpers.get_llm_usage_info(run_dict)
 
             # workaround for `.astream()` method usage
             if span_data.input == {"input": ""}:
@@ -366,9 +381,9 @@ class OpikTracer(BaseTracer):
                 model=usage_info.model,
             )
 
-            self._opik_client.span(**span_data.__dict__)
+            self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
-            LOGGER.debug(f"Failed during _process_end_span: {e}")
+            LOGGER.error(f"Failed during _process_end_span: {e}", exc_info=True)
         finally:
             self._opik_context_storage.trim_span_data_stack_to_certain_span(
                 span_id=span_data.id
@@ -388,7 +403,7 @@ class OpikTracer(BaseTracer):
                 output=None,
                 error_info=error_info,
             )
-            self._opik_client.span(**span_data.__dict__)
+            self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
