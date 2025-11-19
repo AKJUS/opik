@@ -6160,9 +6160,9 @@ components:
           - CUSTOM
         content:
           type: object
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters:
       required:
@@ -6395,9 +6395,9 @@ components:
           - CUSTOM
         content:
           type: object
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -6671,9 +6671,9 @@ components:
           - CUSTOM
         content:
           type: object
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:

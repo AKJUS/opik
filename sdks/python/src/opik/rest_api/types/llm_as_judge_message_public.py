@@ -10,8 +10,8 @@ from .llm_as_judge_message_public_role import LlmAsJudgeMessagePublicRole
 class LlmAsJudgeMessagePublic(UniversalBaseModel):
     role: LlmAsJudgeMessagePublicRole
     content: typing.Dict[str, typing.Optional[typing.Any]]
-    structured_content: typing.Optional[bool] = None
     string_content: typing.Optional[bool] = None
+    structured_content: typing.Optional[bool] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

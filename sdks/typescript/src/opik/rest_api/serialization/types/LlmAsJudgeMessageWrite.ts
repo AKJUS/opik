@@ -13,15 +13,15 @@ export const LlmAsJudgeMessageWrite: core.serialization.ObjectSchema<
 > = core.serialization.object({
     role: LlmAsJudgeMessageWriteRole,
     content: core.serialization.record(core.serialization.string(), core.serialization.unknown()),
-    structuredContent: core.serialization.property("structured_content", core.serialization.boolean().optional()),
     stringContent: core.serialization.property("string_content", core.serialization.boolean().optional()),
+    structuredContent: core.serialization.property("structured_content", core.serialization.boolean().optional()),
 });
 
 export declare namespace LlmAsJudgeMessageWrite {
     export interface Raw {
         role: LlmAsJudgeMessageWriteRole.Raw;
         content: Record<string, unknown>;
-        structured_content?: boolean | null;
         string_content?: boolean | null;
+        structured_content?: boolean | null;
     }
 }
