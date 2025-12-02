@@ -10,7 +10,6 @@ from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
-from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
