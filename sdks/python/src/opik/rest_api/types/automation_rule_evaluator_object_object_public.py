@@ -28,6 +28,7 @@ class Base(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
+    filters: typing.List[typing.Dict[str, typing.Optional[typing.Any]]]
     action: typing.Literal["evaluator"] = "evaluator"
 
     if IS_PYDANTIC_V2:
