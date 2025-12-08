@@ -6532,6 +6532,7 @@ components:
     AutomationRuleEvaluator:
       required:
       - action
+      - filters
       - name
       - project_id
       - type
@@ -6569,6 +6570,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        filters:
+          type: array
+          items:
+            type: object
         type:
           type: string
           enum:
@@ -6593,6 +6598,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6611,6 +6617,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6629,6 +6636,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6647,6 +6655,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6665,6 +6674,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6923,6 +6933,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6941,6 +6952,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6959,6 +6971,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6977,6 +6990,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6995,6 +7009,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -7012,6 +7027,7 @@ components:
     AutomationRuleEvaluator_Write:
       required:
       - action
+      - filters
       - name
       - project_id
       - type
@@ -7028,6 +7044,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/Filter_Write"
         type:
           type: string
           enum:
@@ -7048,6 +7068,30 @@ components:
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
           span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Write"
+    Filter_Write:
+      type: object
+      properties:
+        value:
+          type: string
+        field:
+          type: string
+        key:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
     ImageUrl_Write:
       required:
       - url
@@ -7292,6 +7336,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -7309,6 +7354,7 @@ components:
     AutomationRuleEvaluatorObjectObject_Public:
       required:
       - action
+      - filters
       - name
       - project_id
       - type
@@ -7346,6 +7392,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        filters:
+          type: array
+          items:
+            type: object
         type:
           type: string
           enum:
@@ -7390,6 +7440,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -7408,6 +7459,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -7426,6 +7478,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -7444,6 +7497,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -7701,6 +7755,7 @@ components:
     AutomationRuleEvaluator_Public:
       required:
       - action
+      - filters
       - name
       - project_id
       - type
@@ -7738,6 +7793,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/Filter_Public"
         type:
           type: string
           enum:
@@ -7758,6 +7817,30 @@ components:
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
           span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Public"
+    Filter_Public:
+      type: object
+      properties:
+        value:
+          type: string
+        field:
+          type: string
+        key:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
     LogItem:
       type: object
       properties:
