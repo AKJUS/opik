@@ -37,6 +37,9 @@ from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
 from .attachment import Attachment
 from .attachment_page import AttachmentPage
+from .audio_url import AudioUrl
+from .audio_url_public import AudioUrlPublic
+from .audio_url_write import AudioUrlWrite
 from .auth_details_holder import AuthDetailsHolder
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
@@ -558,6 +561,9 @@ __all__ = [
     "AssistantMessageRole",
     "Attachment",
     "AttachmentPage",
+    "AudioUrl",
+    "AudioUrlPublic",
+    "AudioUrlWrite",
     "AuthDetailsHolder",
     "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorLlmAsJudge",

@@ -6578,6 +6578,13 @@ components:
       properties:
         workspace_name:
           type: string
+    AudioUrl:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluator:
       required:
       - action
@@ -6797,6 +6804,8 @@ components:
           $ref: "#/components/schemas/ImageUrl"
         video_url:
           $ref: "#/components/schemas/VideoUrl"
+        audio_url:
+          $ref: "#/components/schemas/AudioUrl"
     LlmAsJudgeModelParameters:
       required:
       - name
@@ -6962,6 +6971,13 @@ components:
           additionalProperties:
             type: string
     VideoUrl:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
+    AudioUrl_Write:
       required:
       - url
       type: object
@@ -7143,6 +7159,8 @@ components:
           $ref: "#/components/schemas/ImageUrl_Write"
         video_url:
           $ref: "#/components/schemas/VideoUrl_Write"
+        audio_url:
+          $ref: "#/components/schemas/AudioUrl_Write"
     LlmAsJudgeMessage_Write:
       required:
       - role
@@ -7331,6 +7349,13 @@ components:
           additionalProperties:
             type: string
     VideoUrl_Write:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
+    AudioUrl_Public:
       required:
       - url
       type: object
@@ -7553,6 +7578,8 @@ components:
           $ref: "#/components/schemas/ImageUrl_Public"
         video_url:
           $ref: "#/components/schemas/VideoUrl_Public"
+        audio_url:
+          $ref: "#/components/schemas/AudioUrl_Public"
     LlmAsJudgeMessage_Public:
       required:
       - role
@@ -11649,6 +11676,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
+          - opik-builtin
         api_key:
           type: string
         name:
@@ -11688,6 +11716,11 @@ components:
           readOnly: true
         last_updated_by:
           type: string
+          readOnly: true
+        read_only:
+          type: boolean
+          description: "If true, this provider is system-managed and cannot be edited\
+            \ or deleted"
           readOnly: true
     ProviderApiKey:
       required:
@@ -11707,6 +11740,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
+          - opik-builtin
         api_key:
           type: string
         name:
@@ -11747,6 +11781,11 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        read_only:
+          type: boolean
+          description: "If true, this provider is system-managed and cannot be edited\
+            \ or deleted"
+          readOnly: true
     ProviderApiKey_Write:
       required:
       - provider
@@ -11761,6 +11800,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
+          - opik-builtin
         api_key:
           type: string
         name:
