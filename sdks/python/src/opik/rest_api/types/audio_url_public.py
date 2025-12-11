@@ -4,17 +4,10 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .audio_url_public import AudioUrlPublic
-from .image_url_public import ImageUrlPublic
-from .video_url_public import VideoUrlPublic
 
 
-class LlmAsJudgeMessageContentPublic(UniversalBaseModel):
-    type: str
-    text: typing.Optional[str] = None
-    image_url: typing.Optional[ImageUrlPublic] = None
-    video_url: typing.Optional[VideoUrlPublic] = None
-    audio_url: typing.Optional[AudioUrlPublic] = None
+class AudioUrlPublic(UniversalBaseModel):
+    url: str
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
