@@ -1,7 +1,7 @@
-flask==3.1.0
+flask==3.1.1
 gunicorn==23.0.0
-torch==2.6.0
-transformers==4.51.1
+torch==2.8.0
+transformers==4.53.0
 accelerate==1.6.0  # for optimized GPU utilization
 presidio-analyzer==2.2.358
 spacy==3.8.5  # Download the en_core_web_lg model with: python -m spacy download en_core_web_lg
